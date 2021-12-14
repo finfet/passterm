@@ -8,14 +8,14 @@ pub use crate::unix::read_password;
 
 #[derive(Debug)]
 pub enum PromptError {
-    ShowFailed(std::io::Error),
+    EnableFailed(std::io::Error),
     IOError(std::io::Error),
 }
 
 impl std::fmt::Display for PromptError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            PromptError::ShowFailed(e) => write!(f, "Could not re-enable echo: {}", e),
+            PromptError::EnableFailed(e) => write!(f, "Could not re-enable echo: {}", e),
             PromptError::IOError(e) => e.fmt(f),
         }
     }
@@ -30,7 +30,7 @@ impl From<std::io::Error> for PromptError {
 impl Error for PromptError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            PromptError::ShowFailed(e) => Some(e),
+            PromptError::EnableFailed(e) => Some(e),
             PromptError::IOError(e) => Some(e),
         }
     }
@@ -39,20 +39,17 @@ impl Error for PromptError {
 #[cfg(target_family = "windows")]
 mod windows {
     use crate::PromptError;
-    use windows::Win32::Foundation::BOOL;
+    use windows::Win32::Foundation::{BOOL, HANDLE};
     use windows::Win32::System::Console::{
         GetConsoleMode, GetStdHandle, SetConsoleMode, CONSOLE_MODE, ENABLE_ECHO_INPUT,
         STD_INPUT_HANDLE,
     };
 
-    fn set_stdin_echo(echo: bool) -> Result<(), std::io::Error> {
-        let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
-
+    fn set_stdin_echo(echo: bool, handle: HANDLE) -> Result<(), std::io::Error> {
         let mut mode: u32 = 0;
         unsafe {
             let mode_ptr: *mut u32 = &mut mode;
             if GetConsoleMode(handle, mode_ptr as *mut CONSOLE_MODE) == BOOL::from(false) {
-                dbg!("GetConsoleMode failed");
                 return Err(std::io::Error::last_os_error());
             }
         }
@@ -67,7 +64,6 @@ mod windows {
 
         unsafe {
             if SetConsoleMode(handle, mode) == BOOL::from(false) {
-                dbg!("SetConsoleMode failed");
                 return Err(std::io::Error::last_os_error());
             }
         }
@@ -81,18 +77,26 @@ mod windows {
         // support non UTF-8 byte sequences.
         let mut pass = String::new();
 
-        set_stdin_echo(false)?;
+        let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+
+        // Disable terminal echo.
+        set_stdin_echo(false, handle)?;
 
         let stdin = std::io::stdin();
-        stdin.read_line(&mut pass)?;
+        match stdin.read_line(&mut pass) {
+            Ok(_) => {}
+            Err(e) => {
+                set_stdin_echo(true, handle)?;
+                return Err(PromptError::IOError(e));
+            }
+        };
 
         pass = pass.trim().to_string();
 
         // Re-enable termianal echo.
-        // Failing to re-enable the echo is more serious. Give it a dedicated
-        // error.
-        if let Err(e) = set_stdin_echo(true) {
-            return Err(PromptError::ShowFailed(e));
+        // Use a dedicated error for failing to re-enable echo.
+        if let Err(e) = set_stdin_echo(true, handle) {
+            return Err(PromptError::EnableFailed(e));
         }
 
         Ok(pass)
