@@ -1,3 +1,3 @@
 # Terminal Password Prompt
 
-Disable terminal echo while prompting for passwords
+Cross platform way to disable terminal echo while prompting for passwords.

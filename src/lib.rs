@@ -1,5 +1,11 @@
 use std::error::Error;
 
+#[cfg(target_family = "windows")]
+pub use crate::windows::read_password;
+
+#[cfg(target_family = "unix")]
+pub use crate::unix::read_password;
+
 #[derive(Debug)]
 pub enum PromptError {
     ShowFailed(std::io::Error),
@@ -99,20 +105,5 @@ mod unix {
 
     pub fn read_password() -> Result<Vec<u8>, PromptError> {
         todo!()
-    }
-}
-
-#[cfg(target_family = "windows")]
-pub use crate::windows::read_password;
-
-#[cfg(target_family = "unix")]
-pub use crate::unix::read_password;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
     }
 }
