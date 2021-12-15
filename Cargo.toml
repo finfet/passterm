@@ -2,6 +2,16 @@
 name = "passterm"
 version = "0.1.0"
 edition = "2021"
+authors = [
+	"Kyle Schreiber <kyle@80x24.net>",
+]
+readme = "README.md"
+license = "Apache-2.0"
+description = "Read passwords from terminal"
+repository = "https://github.com/finfet/passterm"
+homepage = "https://github.com/finfet/passterm"
+keywords = ["read", "password", "security", "pass", "getpass"]
+categories = ["command-line-interface"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
