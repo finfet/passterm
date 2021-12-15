@@ -14,8 +14,8 @@ pub use crate::windows::read_password;
 #[cfg(target_family = "unix")]
 pub use crate::unix::read_password;
 
-/// PromptError is returned if there is an issue getting user input from
-/// STDIN or if terminal echo could not be disabled.
+/// Returned if there is an issue getting user input from STDIN or if echo
+/// could not be disabled.
 ///
 /// [`PromptError::EnableFailed`] is more serious and is returned when
 /// echo was was successfully disabled, but could not be re-enabled. Future

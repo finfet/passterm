@@ -1,6 +1,6 @@
 [package]
 name = "passterm"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 authors = [
 	"Kyle Schreiber <kyle@80x24.net>",
@@ -9,6 +9,7 @@ readme = "README.md"
 license = "Apache-2.0"
 description = "Read passwords from terminal"
 repository = "https://github.com/finfet/passterm"
+documentation = "https://docs.rs/passterm/"
 homepage = "https://github.com/finfet/passterm"
 keywords = ["read", "password", "security", "pass", "getpass"]
 categories = ["command-line-interface"]
