@@ -45,12 +45,12 @@ mod windows {
         STD_INPUT_HANDLE,
     };
 
-    fn set_stdin_echo(echo: bool, handle: HANDLE) -> Result<(), std::io::Error> {
+    fn set_stdin_echo(echo: bool, handle: HANDLE) -> Result<(), PromptError> {
         let mut mode: u32 = 0;
         unsafe {
             let mode_ptr: *mut u32 = &mut mode;
             if GetConsoleMode(handle, mode_ptr as *mut CONSOLE_MODE) == BOOL::from(false) {
-                return Err(std::io::Error::last_os_error());
+                return Err(PromptError::IOError(std::io::Error::last_os_error()));
             }
         }
 
@@ -64,7 +64,12 @@ mod windows {
 
         unsafe {
             if SetConsoleMode(handle, mode) == BOOL::from(false) {
-                return Err(std::io::Error::last_os_error());
+                let err = std::io::Error::last_os_error();
+                if echo {
+                    return Err(PromptError::EnableFailed(err));
+                } else {
+                    return Err(PromptError::IOError(err));
+                }
             }
         }
 
@@ -94,10 +99,7 @@ mod windows {
         pass = pass.trim().to_string();
 
         // Re-enable termianal echo.
-        // Use a dedicated error for failing to re-enable echo.
-        if let Err(e) = set_stdin_echo(true, handle) {
-            return Err(PromptError::EnableFailed(e));
-        }
+        set_stdin_echo(true, handle)?;
 
         Ok(pass)
     }
@@ -105,9 +107,62 @@ mod windows {
 
 #[cfg(target_family = "unix")]
 mod unix {
+    use libc::{tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
+    use std::mem::MaybeUninit;
+
     use crate::PromptError;
 
-    pub fn read_password() -> Result<Vec<u8>, PromptError> {
-        todo!()
+    fn set_stdin_echo(echo: bool) -> Result<(), PromptError> {
+        let mut tty = MaybeUninit::<termios>::uninit();
+        unsafe {
+            if tcgetattr(STDIN_FILENO, tty.as_mut_ptr()) != 0 {
+                return Err(PromptError::IOError(std::io::Error::last_os_error()));
+            }
+        }
+
+        let mut tty = unsafe { tty.assume_init() };
+
+        if !echo {
+            tty.c_lflag &= !ECHO;
+        } else {
+            tty.c_lflag |= ECHO;
+        }
+
+        unsafe {
+            if tcsetattr(STDIN_FILENO, TCSANOW, &mut tty as *mut _) != 0 {
+                let err = std::io::Error::last_os_error();
+                if echo {
+                    return Err(PromptError::EnableFailed(err));
+                } else {
+                    return Err(PromptError::IOError(err));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Read a password from standard input. Newline not included.
+    pub fn read_password() -> Result<String, PromptError> {
+        let mut pass = String::new();
+
+        // Disable terminal echo
+        set_stdin_echo(false)?;
+
+        let stdin = std::io::stdin();
+        match stdin.read_line(&mut pass) {
+            Ok(_) => {}
+            Err(e) => {
+                set_stdin_echo(true)?;
+                return Err(PromptError::IOError(e));
+            }
+        };
+
+        // Re-enable terminal echo
+        set_stdin_echo(true)?;
+
+        pass = pass.trim().to_string();
+
+        Ok(pass)
     }
 }
