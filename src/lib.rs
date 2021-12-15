@@ -1,3 +1,11 @@
+// Copyright 2021 Kyle Schreiber
+// SPDX-License-Identifier: Apache-2.0
+
+//! Prompt the user for a password without echoing.
+//!
+//! Use the [`read_password()`] function to read a line from stdin with
+//! echo disabled.
+
 use std::error::Error;
 
 #[cfg(target_family = "windows")]
@@ -6,6 +14,12 @@ pub use crate::windows::read_password;
 #[cfg(target_family = "unix")]
 pub use crate::unix::read_password;
 
+/// PromptError is returned if there is an issue getting user input from
+/// STDIN or if terminal echo could not be disabled.
+///
+/// [`PromptError::EnableFailed`] is more serious and is returned when
+/// echo was was successfully disabled, but could not be re-enabled. Future
+/// terminal output may not echo properly if this error is not handled.
 #[derive(Debug)]
 pub enum PromptError {
     EnableFailed(std::io::Error),
@@ -76,7 +90,7 @@ mod windows {
         Ok(())
     }
 
-    /// Read a password from standard input. Newline not included.
+    /// Read a password from  STDIN. Does not include the newline.
     pub fn read_password() -> Result<String, PromptError> {
         // The rust docs for std::io::Stdin note that windows does not
         // support non UTF-8 byte sequences.
@@ -142,7 +156,7 @@ mod unix {
         Ok(())
     }
 
-    /// Read a password from standard input. Newline not included.
+    /// Read a password from  STDIN. Does not include the newline.
     pub fn read_password() -> Result<String, PromptError> {
         let mut pass = String::new();
 

@@ -1,3 +1,6 @@
+// Copyright 2021 Kyle Schreiber
+// SPDX-License-Identifier: Apache-2.0
+
 use passterm::read_password;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
