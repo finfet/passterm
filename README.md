@@ -1,7 +1,10 @@
 # Terminal Password Prompt
 
-Cross platform way to disable terminal echo. Works on Linux/BSD, macOS, and
-Windows.
+Easily prompt a user for a password in the terminal.
+
+Provides a cross-platform way to disable terminal echo.
+
+Works on Linux/BSD, macOS, and Windows.
 
 This is similar to python's getpass functionality.
 
