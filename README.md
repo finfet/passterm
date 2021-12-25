@@ -12,9 +12,13 @@ Example
 
 ```rust
 use passterm::read_password;
+std::io::Write;
 
 print!("Password: ");
+std::io::stdout().flush().unwrap();
+
 let pass = read_password().unwrap();
+println!("\nYour password is: {}", pass);
 ```
 
 See `examples/pass.rs` for a complete example.

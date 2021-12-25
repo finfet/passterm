@@ -1,5 +1,5 @@
 // Copyright 2021 Kyle Schreiber
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: BSD-3-Clause
 
 //! Prompt the user for a password without echoing.
 //!
@@ -54,6 +54,7 @@ impl Error for PromptError {
 mod windows {
     use crate::PromptError;
     use windows::Win32::Foundation::{BOOL, HANDLE};
+    use windows::Win32::Storage::FileSystem::GetFileType;
     use windows::Win32::System::Console::{
         GetConsoleMode, GetStdHandle, SetConsoleMode, CONSOLE_MODE, ENABLE_ECHO_INPUT,
         STD_INPUT_HANDLE,
@@ -90,7 +91,7 @@ mod windows {
         Ok(())
     }
 
-    /// Read a password from  STDIN. Does not include the newline.
+    /// Read a password from STDIN. Does not include the newline.
     pub fn read_password() -> Result<String, PromptError> {
         // The rust docs for std::io::Stdin note that windows does not
         // support non UTF-8 byte sequences.
@@ -98,22 +99,42 @@ mod windows {
 
         let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
 
-        // Disable terminal echo.
-        set_stdin_echo(false, handle)?;
+        let console = unsafe {
+            // FILE_TYPE_CHAR is 0x0002 which is a console
+            // NOTE: In mysys2 terminals like git bash on windows
+            // the file type comes back as FILE_TYPE_PIPE 0x03.
+            // This means that we can't tell if we're in a pipe or a console
+            // on msys2 terminals, so echo won't be disabled at all.
+            if GetFileType(handle) == 0x02 {
+                true
+            } else {
+                false
+            }
+        };
+
+        // Disable terminal echo if we're in a console, if we're not,
+        // stdin was probably piped in.
+        if console {
+            set_stdin_echo(false, handle)?;
+        }
 
         let stdin = std::io::stdin();
         match stdin.read_line(&mut pass) {
             Ok(_) => {}
             Err(e) => {
-                set_stdin_echo(true, handle)?;
+                if console {
+                    set_stdin_echo(true, handle)?;
+                }
                 return Err(PromptError::IOError(e));
             }
         };
 
         pass = pass.trim().to_string();
 
-        // Re-enable termianal echo.
-        set_stdin_echo(true, handle)?;
+        if console {
+            // Re-enable termianal echo.
+            set_stdin_echo(true, handle)?;
+        }
 
         Ok(pass)
     }
@@ -156,7 +177,7 @@ mod unix {
         Ok(())
     }
 
-    /// Read a password from  STDIN. Does not include the newline.
+    /// Read a password from STDIN. Does not include the newline.
     pub fn read_password() -> Result<String, PromptError> {
         let mut pass = String::new();
 
