@@ -1,10 +1,14 @@
 # Terminal Password Prompt
 
-Easily prompt a user for a password in the terminal.
+Easily get a password from the terminal.
 
-Provides a cross-platform way to disable terminal echo.
+This crate provides a cross-platform way to disable terminal echo.
 
-Works on Linux/BSD, macOS, and Windows.
+Tested on Linux, macOS, and Windows. BSD will also probably work but hasn't
+been tested.
+
+The windows portion uses the new official windows crate instead of
+the older winapi crate.
 
 This is similar to python's getpass functionality.
 
@@ -14,11 +18,12 @@ Example
 use passterm::read_password;
 std::io::Write;
 
-print!("Password: ");
-std::io::stdout().flush().unwrap();
+print!("New password: ");
+std::io::stdout().flush()?;
+let pass = read_password()?;
+println!();
 
-let pass = read_password().unwrap();
-println!("\nYour password is: {}", pass);
+println!("Your password is: {}", pass.as_str());
 ```
 
 See `examples/pass.rs` for a complete example.

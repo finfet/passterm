@@ -164,7 +164,8 @@ mod unix {
         }
 
         unsafe {
-            if tcsetattr(STDIN_FILENO, TCSANOW, &mut tty as *mut _) != 0 {
+            let tty_ptr: *const termios = &tty;
+            if tcsetattr(STDIN_FILENO, TCSANOW, tty_ptr) != 0 {
                 let err = std::io::Error::last_os_error();
                 if echo {
                     return Err(PromptError::EnableFailed(err));
