@@ -142,7 +142,7 @@ mod windows {
 
 #[cfg(target_family = "unix")]
 mod unix {
-    use libc::{tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
+    use libc::{isatty, tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
     use std::mem::MaybeUninit;
 
     use crate::PromptError;
@@ -181,20 +181,34 @@ mod unix {
     pub fn read_password() -> Result<String, PromptError> {
         let mut pass = String::new();
 
-        // Disable terminal echo
-        set_stdin_echo(false)?;
+        let is_tty = unsafe {
+            if isatty(STDIN_FILENO) == 1 {
+                true
+            } else {
+                false
+            }
+        };
+
+        if is_tty {
+            // Disable terminal echo
+            set_stdin_echo(false)?;
+        }
 
         let stdin = std::io::stdin();
         match stdin.read_line(&mut pass) {
             Ok(_) => {}
             Err(e) => {
-                set_stdin_echo(true)?;
+                if is_tty {
+                    set_stdin_echo(true)?;
+                }
                 return Err(PromptError::IOError(e));
             }
         };
 
-        // Re-enable terminal echo
-        set_stdin_echo(true)?;
+        if is_tty {
+            // Re-enable terminal echo
+            set_stdin_echo(true)?;
+        }
 
         pass = pass.trim().to_string();
 
