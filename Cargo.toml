@@ -1,12 +1,12 @@
 [package]
 name = "passterm"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 authors = [
 	"Kyle Schreiber <kyle@80x24.net>",
 ]
 readme = "README.md"
-license = "Apache-2.0"
+license = "BSD-3-Clause"
 description = "Read passwords from terminal"
 repository = "https://github.com/finfet/passterm"
 documentation = "https://docs.rs/passterm/"
