@@ -1,18 +1,30 @@
 // Copyright 2021 Kyle Schreiber
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Prompt the user for a password without echoing.
+//! Terminal utilities
 //!
 //! Use the [`read_password()`] function to read a line from stdin with
 //! echo disabled.
+//!
+//! Use the [`isatty()`] function to check if the given stream
+//! is a tty.
 
+mod tty;
+
+pub use crate::tty::Stream;
 use std::error::Error;
 
 #[cfg(target_family = "windows")]
 pub use crate::windows::read_password;
 
+#[cfg(target_family = "windows")]
+pub use crate::tty::isatty;
+
 #[cfg(target_family = "unix")]
 pub use crate::unix::read_password;
+
+#[cfg(target_family = "unix")]
+pub use crate::tty::isatty;
 
 /// Returned if there is an issue getting user input from STDIN or if echo
 /// could not be disabled.
@@ -53,7 +65,7 @@ impl Error for PromptError {
 #[cfg(target_family = "windows")]
 mod windows {
     use crate::PromptError;
-    use windows::Win32::Foundation::{BOOL, HANDLE};
+    use windows::Win32::Foundation::HANDLE;
     use windows::Win32::Storage::FileSystem::GetFileType;
     use windows::Win32::System::Console::{
         GetConsoleMode, GetStdHandle, SetConsoleMode, CONSOLE_MODE, ENABLE_ECHO_INPUT,
@@ -64,12 +76,10 @@ mod windows {
         let mut mode: u32 = 0;
         unsafe {
             let mode_ptr: *mut u32 = &mut mode;
-            if GetConsoleMode(handle, mode_ptr as *mut CONSOLE_MODE) == BOOL::from(false) {
+            if GetConsoleMode(handle, mode_ptr as *mut CONSOLE_MODE) == false {
                 return Err(PromptError::IOError(std::io::Error::last_os_error()));
             }
         }
-
-        let mut mode = CONSOLE_MODE::from(mode);
 
         if !echo {
             mode &= !ENABLE_ECHO_INPUT;
@@ -78,7 +88,7 @@ mod windows {
         }
 
         unsafe {
-            if SetConsoleMode(handle, mode) == BOOL::from(false) {
+            if SetConsoleMode(handle, mode) == false {
                 let err = std::io::Error::last_os_error();
                 if echo {
                     return Err(PromptError::EnableFailed(err));
@@ -105,11 +115,7 @@ mod windows {
             // the file type comes back as FILE_TYPE_PIPE 0x03.
             // This means that we can't tell if we're in a pipe or a console
             // on msys2 terminals, so echo won't be disabled at all.
-            if GetFileType(handle) == 0x02 {
-                true
-            } else {
-                false
-            }
+            GetFileType(handle) == 0x02
         };
 
         // Disable terminal echo if we're in a console, if we're not,
@@ -142,7 +148,7 @@ mod windows {
 
 #[cfg(target_family = "unix")]
 mod unix {
-    use libc::{isatty, tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
+    use libc::{tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
     use std::mem::MaybeUninit;
 
     use crate::PromptError;
@@ -182,13 +188,7 @@ mod unix {
     pub fn read_password() -> Result<String, PromptError> {
         let mut pass = String::new();
 
-        let is_tty = unsafe {
-            if isatty(STDIN_FILENO) == 1 {
-                true
-            } else {
-                false
-            }
-        };
+        let is_tty = unsafe { libc::isatty(STDIN_FILENO) == 1 };
 
         if is_tty {
             // Disable terminal echo

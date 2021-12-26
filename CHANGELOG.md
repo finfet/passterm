@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 1.1.0
+- Add isatty function.
+
 ## Version 1.0.3
 - Fix Cargo.toml license line
 

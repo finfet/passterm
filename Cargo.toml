@@ -1,17 +1,17 @@
 [package]
 name = "passterm"
-version = "1.0.3"
+version = "1.1.0"
 edition = "2021"
 authors = [
 	"Kyle Schreiber <kyle@80x24.net>",
 ]
 readme = "README.md"
 license = "BSD-3-Clause"
-description = "Read passwords from terminal"
+description = "Read terminal password or check isatty"
 repository = "https://github.com/finfet/passterm"
 documentation = "https://docs.rs/passterm/"
 homepage = "https://github.com/finfet/passterm"
-keywords = ["read", "password", "security", "pass", "getpass"]
+keywords = ["tty", "password", "security", "isatty", "getpass"]
 categories = ["command-line-interface"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
