@@ -1,3 +1,6 @@
+// Copyright 2021-2022 Kyle Schreiber
+// SPDX-License-Identifier: BSD-3-Clause
+
 /// Stream represents the Stdin, Stdout, and Stderr streams.
 pub enum Stream {
     Stdin,

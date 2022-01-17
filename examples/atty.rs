@@ -1,3 +1,6 @@
+// Copyright 2021-2022 Kyle Schreiber
+// SPDX-License-Identifier: BSD-3-Clause
+
 use passterm::{isatty, Stream};
 
 fn main() {

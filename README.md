@@ -3,7 +3,7 @@
 Provides a cross-platform way to disable terminal echo or check if a stream
 is a tty.
 
-Functionality similar to python getpass and os.isatty
+Functionality is similar to python's getpass and os.isatty
 
 Tested on Linux, macOS, and Windows. BSD will also probably work but hasn't
 been tested.

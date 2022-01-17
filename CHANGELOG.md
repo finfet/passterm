@@ -1,5 +1,8 @@
 # Changelog
 
+## version 1.1.1
+- Upgrade windows dep
+
 ## Version 1.1.0
 - Add isatty function.
 
