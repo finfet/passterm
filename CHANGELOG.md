@@ -1,6 +1,9 @@
 # Changelog
 
-## version 1.1.1
+## Version 1.1.2
+- Relax windows crate dependency version
+
+## Version 1.1.1
 - Upgrade windows dep
 
 ## Version 1.1.0

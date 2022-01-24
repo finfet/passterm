@@ -1,13 +1,13 @@
 [package]
 name = "passterm"
-version = "1.1.1"
+version = "1.1.2"
 edition = "2021"
 authors = [
 	"Kyle Schreiber <kyle@80x24.net>",
 ]
 readme = "README.md"
 license = "BSD-3-Clause"
-description = "Read terminal password or check isatty"
+description = "Read terminal password, check isatty"
 repository = "https://github.com/finfet/passterm"
 documentation = "https://docs.rs/passterm/"
 homepage = "https://github.com/finfet/passterm"
@@ -19,7 +19,7 @@ categories = ["command-line-interface"]
 [dependencies]
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.30.0", features = ["Win32_System_Console", "Win32_Foundation", "Win32_Storage_FileSystem"] }
+windows = { version = "^0", features = ["Win32_System_Console", "Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
