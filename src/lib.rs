@@ -73,10 +73,9 @@ mod windows {
     };
 
     fn set_stdin_echo(echo: bool, handle: HANDLE) -> Result<(), PromptError> {
-        let mut mode: u32 = 0;
+        let mut mode: CONSOLE_MODE = CONSOLE_MODE(0);
         unsafe {
-            let mode_ptr: *mut u32 = &mut mode;
-            if GetConsoleMode(handle, mode_ptr as *mut CONSOLE_MODE) == false {
+            if GetConsoleMode(handle, &mut mode as *mut CONSOLE_MODE) == false {
                 return Err(PromptError::IOError(std::io::Error::last_os_error()));
             }
         }

@@ -1,15 +1,18 @@
 # Terminal Utilities
 
-Provides a cross-platform way to disable terminal echo or check if a stream
-is a tty.
+Provides a way to read passwords from a terminal. Terminal echo is disabled
+when reading the password.
 
-Functionality is similar to python's getpass and os.isatty
+Also provides the ability to check if a terminal is a tty or not.
 
-Tested on Linux, macOS, and Windows. BSD will also probably work but hasn't
+This crate provides functionality similar to the python getpass and os.isatty
+functions.
+
+Tested on Linux, macOS, and Windows. BSD will also likely work but haven't
 been tested.
 
-The windows portion uses the new official windows crate instead of
-the older winapi crate.
+Functions on windows use the new, official windows crate instead of the older
+winapi crate.
 
 Example: Get a password
 

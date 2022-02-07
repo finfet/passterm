@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 1.1.3
+- Fix broken console mode from windows crate update
+
 ## Version 1.1.2
 - Relax windows crate dependency version
 
