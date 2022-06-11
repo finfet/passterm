@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 1.1.4
+- Fix for windows crate update
+- Bump windows crate version to >=0.37
+
 ## Version 1.1.3
 - Fix broken console mode from windows crate update
 

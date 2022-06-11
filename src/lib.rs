@@ -106,7 +106,8 @@ mod windows {
         // support non UTF-8 byte sequences.
         let mut pass = String::new();
 
-        let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+        let handle =
+            unsafe { GetStdHandle(STD_INPUT_HANDLE).map_err(|e| PromptError::IOError(e.into()))? };
 
         let console = unsafe {
             // FILE_TYPE_CHAR is 0x0002 which is a console

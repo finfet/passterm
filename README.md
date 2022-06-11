@@ -8,8 +8,7 @@ Also provides the ability to check if a terminal is a tty or not.
 This crate provides functionality similar to the python getpass and os.isatty
 functions.
 
-Tested on Linux, macOS, and Windows. BSD will also likely work but haven't
-been tested.
+Tested on Linux, macOS, and Windows.
 
 Functions on windows use the new, official windows crate instead of the older
 winapi crate.

@@ -27,9 +27,15 @@ mod windows {
     pub fn isatty(stream: Stream) -> bool {
         let handle = unsafe {
             match stream {
-                Stream::Stdin => GetStdHandle(STD_INPUT_HANDLE),
-                Stream::Stdout => GetStdHandle(STD_OUTPUT_HANDLE),
-                Stream::Stderr => GetStdHandle(STD_ERROR_HANDLE),
+                Stream::Stdin => {
+                    GetStdHandle(STD_INPUT_HANDLE).expect("Couldn not get input handle")
+                }
+                Stream::Stdout => {
+                    GetStdHandle(STD_OUTPUT_HANDLE).expect("Couldn not get output handle")
+                }
+                Stream::Stderr => {
+                    GetStdHandle(STD_ERROR_HANDLE).expect("Could not get error handle")
+                }
             }
         };
 
