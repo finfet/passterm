@@ -5,7 +5,7 @@ when reading the password.
 
 Also provides the ability to check if a terminal is a tty or not.
 
-This crate provides functionality similar to the python getpass and os.isatty
+This crate provides functionality similar to the python `getpass` and `os.isatty`
 functions.
 
 Tested on Linux, macOS, and Windows.
@@ -17,7 +17,7 @@ Example: Get a password
 
 ```rust
 use passterm::read_password;
-std::io::Write;
+use std::io::Write;
 
 print!("New password: ");
 std::io::stdout().flush()?;
@@ -30,7 +30,7 @@ println!("Your password is: {}", pass.as_str());
 Example: Check if standard output has been redirected
 
 ```rust
-use passterm::{isatty, Stream}
+use passterm::{isatty, Stream};
 
 let is_tty = isatty(Stream::Stdout);
 if is_tty {

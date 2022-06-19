@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 1.1.6
+- Update documentation
+
 ## Version 1.1.5
 - Remove panic on handle acquisition failure on windows
 

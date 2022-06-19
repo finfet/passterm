@@ -22,8 +22,8 @@ mod windows {
         GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     };
 
-    #[allow(clippy::let_and_return)]
     /// Returns true if the given stream is a tty
+    #[allow(clippy::let_and_return)]
     pub fn isatty(stream: Stream) -> bool {
         let handle = unsafe {
             match stream {
@@ -56,6 +56,7 @@ mod unix {
     use crate::tty::Stream;
     use libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 
+    /// Returns true if the given stream is a tty
     #[allow(clippy::let_and_return)]
     pub fn isatty(stream: Stream) -> bool {
         let is_atty = unsafe {
