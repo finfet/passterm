@@ -1,6 +1,6 @@
 [package]
 name = "passterm"
-version = "1.1.4"
+version = "1.1.5"
 edition = "2021"
 authors = [
 	"Kyle Schreiber <kyle@80x24.net>",
@@ -13,8 +13,6 @@ documentation = "https://docs.rs/passterm/"
 homepage = "https://github.com/finfet/passterm"
 keywords = ["tty", "password", "security", "isatty", "getpass"]
 categories = ["command-line-interface"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 

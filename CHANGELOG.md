@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 1.1.5
+- Remove panic on handle acquisition failure on windows
+
 ## Version 1.1.4
 - Fix for windows crate update
 - Bump windows crate version to >=0.37
