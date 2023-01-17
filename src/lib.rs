@@ -115,7 +115,7 @@ mod windows {
             // the file type comes back as FILE_TYPE_PIPE 0x03.
             // This means that we can't tell if we're in a pipe or a console
             // on msys2 terminals, so echo won't be disabled at all.
-            GetFileType(handle) == 0x02
+            GetFileType(handle) == windows::Win32::Storage::FileSystem::FILE_TYPE(0x02)
         };
 
         // Disable terminal echo if we're in a console, if we're not,

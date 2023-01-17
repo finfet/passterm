@@ -44,7 +44,7 @@ mod windows {
 
         let is_atty = unsafe {
             // 0x02 is FILE_TYPE_CHAR which consoles show as.
-            GetFileType(handle) == 0x02
+            GetFileType(handle) == windows::Win32::Storage::FileSystem::FILE_TYPE(0x02)
         };
 
         is_atty
