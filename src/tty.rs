@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Kyle Schreiber
+// Copyright 2021-2023 Kyle Schreiber
 // SPDX-License-Identifier: BSD-3-Clause
 
 /// Stream represents the Stdin, Stdout, and Stderr streams.
@@ -43,8 +43,8 @@ mod windows {
         };
 
         let is_atty = unsafe {
-            // 0x02 is FILE_TYPE_CHAR which consoles show as.
-            GetFileType(handle) == windows::Win32::Storage::FileSystem::FILE_TYPE(0x02)
+            // Consoles will show as FILE_TYPE_CHAR (0x02)
+            GetFileType(handle) == windows::Win32::Storage::FileSystem::FILE_TYPE_CHAR
         };
 
         is_atty

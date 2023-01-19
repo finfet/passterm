@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Kyle Schreiber
+// Copyright 2021-2023 Kyle Schreiber
 // SPDX-License-Identifier: BSD-3-Clause
 
 //! Terminal utilities
@@ -115,7 +115,7 @@ mod windows {
             // the file type comes back as FILE_TYPE_PIPE 0x03.
             // This means that we can't tell if we're in a pipe or a console
             // on msys2 terminals, so echo won't be disabled at all.
-            GetFileType(handle) == windows::Win32::Storage::FileSystem::FILE_TYPE(0x02)
+            GetFileType(handle) == windows::Win32::Storage::FileSystem::FILE_TYPE_CHAR
         };
 
         // Disable terminal echo if we're in a console, if we're not,

@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 1.1.7
+
+- Fix for windows create update
+- Bump windows crate version to >=0.44
+
 ## Version 1.1.6
 - Update documentation
 
