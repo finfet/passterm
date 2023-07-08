@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 2.0.0
+
+- Unreleased
+- Rename password functions
+- Add ability to read password from tty
+
 ## Version 1.1.7
 
 - Fix for windows create update

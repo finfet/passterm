@@ -15,13 +15,13 @@ pub use crate::tty::Stream;
 use std::error::Error;
 
 #[cfg(target_family = "windows")]
-pub use crate::windows::read_password;
+pub use crate::windows::read_password_stdin;
 
 #[cfg(target_family = "windows")]
 pub use crate::tty::isatty;
 
 #[cfg(target_family = "unix")]
-pub use crate::unix::read_password;
+pub use crate::unix::read_password_stdin;
 
 #[cfg(target_family = "unix")]
 pub use crate::tty::isatty;
@@ -65,17 +65,17 @@ impl Error for PromptError {
 #[cfg(target_family = "windows")]
 mod windows {
     use crate::PromptError;
-    use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::Storage::FileSystem::GetFileType;
-    use windows::Win32::System::Console::{
+    use windows_sys::Win32::Foundation::{HANDLE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::GetFileType;
+    use windows_sys::Win32::System::Console::{
         GetConsoleMode, GetStdHandle, SetConsoleMode, CONSOLE_MODE, ENABLE_ECHO_INPUT,
         STD_INPUT_HANDLE,
     };
 
     fn set_stdin_echo(echo: bool, handle: HANDLE) -> Result<(), PromptError> {
-        let mut mode: CONSOLE_MODE = CONSOLE_MODE(0);
+        let mut mode: CONSOLE_MODE = 0;
         unsafe {
-            if GetConsoleMode(handle, &mut mode as *mut CONSOLE_MODE) == false {
+            if GetConsoleMode(handle, &mut mode as *mut CONSOLE_MODE) == 0 {
                 return Err(PromptError::IOError(std::io::Error::last_os_error()));
             }
         }
@@ -87,7 +87,7 @@ mod windows {
         }
 
         unsafe {
-            if SetConsoleMode(handle, mode) == false {
+            if SetConsoleMode(handle, mode) == 0 {
                 let err = std::io::Error::last_os_error();
                 if echo {
                     return Err(PromptError::EnableFailed(err));
@@ -101,13 +101,23 @@ mod windows {
     }
 
     /// Read a password from STDIN. Does not include the newline.
-    pub fn read_password() -> Result<String, PromptError> {
+    pub fn read_password_stdin() -> Result<String, PromptError> {
         // The rust docs for std::io::Stdin note that windows does not
         // support non UTF-8 byte sequences.
         let mut pass = String::new();
 
-        let handle =
-            unsafe { GetStdHandle(STD_INPUT_HANDLE).map_err(|e| PromptError::IOError(e.into()))? };
+        let handle = unsafe {
+            let handle = GetStdHandle(STD_INPUT_HANDLE);
+            if handle == INVALID_HANDLE_VALUE {
+                let err = std::io::Error::last_os_error();
+                return Err(PromptError::IOError(err));
+            } else if handle == 0 {
+                let err = std::io::Error::new(std::io::ErrorKind::Other, "Null Handle");
+                return Err(PromptError::IOError(err));
+            }
+
+            handle
+        };
 
         let console = unsafe {
             // FILE_TYPE_CHAR is 0x0002 which is a console
@@ -115,7 +125,7 @@ mod windows {
             // the file type comes back as FILE_TYPE_PIPE 0x03.
             // This means that we can't tell if we're in a pipe or a console
             // on msys2 terminals, so echo won't be disabled at all.
-            GetFileType(handle) == windows::Win32::Storage::FileSystem::FILE_TYPE_CHAR
+            GetFileType(handle) == windows_sys::Win32::Storage::FileSystem::FILE_TYPE_CHAR
         };
 
         // Disable terminal echo if we're in a console, if we're not,
@@ -185,7 +195,7 @@ mod unix {
     }
 
     /// Read a password from STDIN. Does not include the newline.
-    pub fn read_password() -> Result<String, PromptError> {
+    pub fn read_password_stdin() -> Result<String, PromptError> {
         let mut pass = String::new();
 
         let is_tty = unsafe { libc::isatty(STDIN_FILENO) == 1 };
