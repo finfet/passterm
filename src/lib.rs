@@ -111,9 +111,6 @@ mod windows {
             if handle == INVALID_HANDLE_VALUE {
                 let err = std::io::Error::last_os_error();
                 return Err(PromptError::IOError(err));
-            } else if handle == 0 {
-                let err = std::io::Error::new(std::io::ErrorKind::Other, "Null Handle");
-                return Err(PromptError::IOError(err));
             }
 
             handle

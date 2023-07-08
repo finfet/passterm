@@ -53,7 +53,7 @@ mod windows {
 
     unsafe fn get_handle(input_handle: STD_HANDLE) -> Result<HANDLE, ()> {
         let handle = GetStdHandle(input_handle);
-        if handle == INVALID_HANDLE_VALUE || handle == 0 {
+        if handle == INVALID_HANDLE_VALUE {
             return Err(());
         }
 
