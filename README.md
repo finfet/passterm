@@ -16,15 +16,12 @@ winapi crate.
 Example: Get a password
 
 ```rust
-use passterm::read_password_stdin;
+use passterm::prompt_password_tty;
 use std::io::Write;
 
-print!("New password: ");
-std::io::stdout().flush()?;
-let pass = read_password_stdin()?;
-println!();
+let pass = prompt_password_tty("Password: ")?;
 
-println!("Your password is: {}", pass.as_str());
+println!("Your password is: {}", &pass);
 ```
 
 Example: Check if standard output has been redirected

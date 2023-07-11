@@ -1,23 +1,29 @@
 // Copyright 2021-2023 Kyle Schreiber
 // SPDX-License-Identifier: BSD-3-Clause
 
-use passterm::read_password_stdin;
+use passterm::{prompt_password_tty, read_password_stdin};
 use std::io::Write;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    print!("New password: ");
+    prompt_stdin()?;
+    prompt_tty()?;
+
+    Ok(())
+}
+
+fn prompt_stdin() -> Result<(), Box<dyn std::error::Error>> {
+    print!("stdin password: ");
     std::io::stdout().flush()?;
-    let pass1 = read_password_stdin()?;
+    let pass = read_password_stdin()?;
     println!();
+    println!("You entered: {}", &pass);
 
-    println!("got: {}", pass1.as_str());
+    Ok(())
+}
 
-    print!("Confirm password: ");
-    std::io::stdout().flush()?;
-    let pass2 = read_password_stdin()?;
-    println!();
-
-    println!("got2: {}", pass2.as_str());
+fn prompt_tty() -> Result<(), Box<dyn std::error::Error>> {
+    let pass = prompt_password_tty("Tty password: ")?;
+    println!("You entered: {}", &pass);
 
     Ok(())
 }
