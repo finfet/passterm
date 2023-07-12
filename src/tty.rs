@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 /// Stream represents the Stdin, Stdout, and Stderr streams.
+#[derive(Clone, Copy, PartialEq)]
 pub enum Stream {
     Stdin,
     Stdout,

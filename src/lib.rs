@@ -14,9 +14,9 @@ mod tty;
 pub use crate::tty::Stream;
 use std::error::Error;
 
-pub use crate::windows::prompt_password_tty;
 #[cfg(target_family = "windows")]
-pub use crate::windows::read_password_stdin;
+pub use crate::windows::prompt_password_stdin;
+pub use crate::windows::prompt_password_tty;
 
 #[cfg(target_family = "windows")]
 pub use crate::tty::isatty;
@@ -63,16 +63,40 @@ impl Error for PromptError {
     }
 }
 
+fn output(prompt: &str, stream: Stream) -> Result<(), PromptError> {
+    use std::io::Write;
+
+    if stream == Stream::Stdout {
+        print!("{}", prompt);
+        std::io::stdout().flush()?;
+    } else {
+        eprint!("{}", prompt);
+        std::io::stderr().flush()?;
+    }
+
+    Ok(())
+}
+
 #[cfg(target_family = "windows")]
 mod windows {
-    use crate::PromptError;
-    use windows_sys::Win32::Foundation::{BOOL, FALSE, HANDLE, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Foundation::{GENERIC_READ, GENERIC_WRITE};
+    use crate::{output, PromptError, Stream};
+
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, BOOL, FALSE, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
+    };
     use windows_sys::Win32::Storage::FileSystem::{CreateFileA, GetFileType, OPEN_EXISTING};
     use windows_sys::Win32::System::Console::{
         GetConsoleMode, GetStdHandle, ReadConsoleW, SetConsoleMode, WriteConsoleW, CONSOLE_MODE,
         ENABLE_ECHO_INPUT, STD_INPUT_HANDLE,
     };
+
+    struct HandleCloser(HANDLE);
+
+    impl Drop for HandleCloser {
+        fn drop(&mut self) {
+            unsafe { CloseHandle(self.0) };
+        }
+    }
 
     fn set_stdin_echo(echo: bool, handle: HANDLE) -> Result<(), PromptError> {
         let mut mode: CONSOLE_MODE = 0;
@@ -102,11 +126,25 @@ mod windows {
         Ok(())
     }
 
-    /// Read a password from STDIN. Does not include the newline.
-    pub fn read_password_stdin() -> Result<String, PromptError> {
-        // The rust docs for std::io::Stdin note that windows does not
-        // support non UTF-8 byte sequences.
-        let mut pass = String::new();
+    /// Write the optional prompt to the specified stream.
+    /// Reads the password from STDIN. Does not include the newline.
+    /// The stream must be Stdout or Stderr
+    ///
+    /// # Examples
+    /// ```
+    /// // A typical use case would be to write the prompt to stderr and read
+    /// // the password from stdin while the output of the application is
+    /// // directed to stdout.
+    /// use passterm::{isatty, Stream, prompt_password_stdin};
+    /// if !isatty(Stream::Stdout) {
+    ///     let pass = prompt_password_stdin(Some("Password: "), Stream::Stderr)?;
+    /// }
+    /// ```
+    pub fn prompt_password_stdin(
+        prompt: Option<&str>,
+        stream: Stream,
+    ) -> Result<String, PromptError> {
+        assert!(stream != Stream::Stdin, "Invalid argument for stream");
 
         let handle: HANDLE = unsafe {
             let handle = GetStdHandle(STD_INPUT_HANDLE);
@@ -117,6 +155,8 @@ mod windows {
 
             handle
         };
+
+        let _handle_closer = HandleCloser(handle);
 
         let console = unsafe {
             // FILE_TYPE_CHAR is 0x0002 which is a console
@@ -133,10 +173,21 @@ mod windows {
             set_stdin_echo(false, handle)?;
         }
 
+        if let Some(p) = prompt {
+            output(p, stream)?;
+        }
+
+        // The rust docs for std::io::Stdin note that windows does not
+        // support non UTF-8 byte sequences.
+        let mut pass = String::new();
         let stdin = std::io::stdin();
         match stdin.read_line(&mut pass) {
             Ok(_) => {}
             Err(e) => {
+                if prompt.is_some() {
+                    output("\n", stream)?;
+                }
+
                 if console {
                     set_stdin_echo(true, handle)?;
                 }
@@ -144,19 +195,23 @@ mod windows {
             }
         };
 
-        pass = pass.trim().to_string();
+        if prompt.is_some() {
+            output("\n", stream)?;
+        }
 
         if console {
             // Re-enable termianal echo.
             set_stdin_echo(true, handle)?;
         }
 
+        pass = pass.trim().to_string();
+
         Ok(pass)
     }
 
     /// Write the prompt to the tty and read input from the tty
     /// Returns the String input (excluding newline)
-    pub fn prompt_password_tty(prompt: &str) -> Result<String, PromptError> {
+    pub fn prompt_password_tty(prompt: Option<&str>) -> Result<String, PromptError> {
         let console_in: HANDLE = unsafe {
             let handle = CreateFileA(
                 b"CONIN$\x00".as_ptr(), // null terminated name
@@ -175,45 +230,65 @@ mod windows {
             handle
         };
 
-        let console_out: HANDLE = unsafe {
-            let handle = CreateFileA(
-                b"CONOUT$\x00".as_ptr(), // null terminated name
-                GENERIC_WRITE,
-                0,
-                std::ptr::null(),
-                OPEN_EXISTING,
-                0,
-                0,
-            );
-            if handle == INVALID_HANDLE_VALUE {
-                let err = std::io::Error::last_os_error();
-                return Err(PromptError::IOError(err));
-            }
+        let _console_in_closer = HandleCloser(console_in);
 
-            handle
+        let console_out: Option<HANDLE> = if prompt.is_some() {
+            let console_out: HANDLE = unsafe {
+                let handle = CreateFileA(
+                    b"CONOUT$\x00".as_ptr(), // null terminated name
+                    GENERIC_WRITE,
+                    0,
+                    std::ptr::null(),
+                    OPEN_EXISTING,
+                    0,
+                    0,
+                );
+                if handle == INVALID_HANDLE_VALUE {
+                    let err = std::io::Error::last_os_error();
+                    return Err(PromptError::IOError(err));
+                }
+
+                handle
+            };
+
+            Some(console_out)
+        } else {
+            None
         };
 
-        write_console(console_out, prompt)?;
+        let _console_out_closer: Option<HandleCloser> = match console_out {
+            Some(c) => Some(HandleCloser(c)),
+            None => None,
+        };
+
+        if prompt.is_some() {
+            write_console(console_out.unwrap(), prompt.unwrap())?;
+        }
+
         set_stdin_echo(false, console_in)?;
         let password = match read_console(console_in) {
             Ok(p) => p,
             Err(e) => {
-                // Write a \r\n to the console because echo was disabled.
-                let crlf = String::from_utf8(vec![0x0d, 0x0a]).unwrap();
-                if let Err(e) = write_console(console_out, &crlf) {
-                    set_stdin_echo(true, console_in)?;
-                    return Err(e);
+                if prompt.is_some() {
+                    // Write a \r\n to the console because echo was disabled.
+                    let crlf = String::from_utf8(vec![0x0d, 0x0a]).unwrap();
+                    if let Err(e) = write_console(console_out.unwrap(), &crlf) {
+                        set_stdin_echo(true, console_in)?;
+                        return Err(e);
+                    }
                 }
                 set_stdin_echo(true, console_in)?;
                 return Err(e);
             }
         };
 
-        // Write a \r\n to the console because echo was disabled.
-        let crlf = String::from_utf8(vec![0x0d, 0x0a]).unwrap();
-        if let Err(e) = write_console(console_out, &crlf) {
-            set_stdin_echo(true, console_in)?;
-            return Err(e);
+        if prompt.is_some() {
+            // Write a \r\n to the console because echo was disabled.
+            let crlf = String::from_utf8(vec![0x0d, 0x0a]).unwrap();
+            if let Err(e) = write_console(console_out.unwrap(), &crlf) {
+                set_stdin_echo(true, console_in)?;
+                return Err(e);
+            }
         }
 
         set_stdin_echo(true, console_in)?;
@@ -245,7 +320,6 @@ mod windows {
 
     /// Read from the console
     fn read_console(console_in: HANDLE) -> Result<String, PromptError> {
-        // TODO: Zero out these buffers at the end of the function
         let mut input: Vec<u16> = Vec::new();
         let mut buffer: [u16; 64] = [0; 64];
 
@@ -263,39 +337,66 @@ mod windows {
             };
 
             if res == FALSE {
+                input.iter_mut().for_each(|d| *d = 0x00);
+                buffer.iter_mut().for_each(|d| *d = 0x00);
+
                 let err = std::io::Error::last_os_error();
                 return Err(PromptError::IOError(err));
             }
 
-            let max_chars = std::cmp::min(num_read, buffer.len() as u32) as usize;
-            let mut done = false;
-            for c in buffer.iter().take(max_chars) {
-                let cr: u16 = 0x000d;
-                let lf: u16 = 0x000a;
-                if *c == cr || *c == lf {
-                    done = true;
-                    break;
-                }
-                input.push(*c);
-            }
-
-            if done {
+            let max_len = std::cmp::min(num_read, buffer.len() as u32) as usize;
+            if let Some(pos) = find_ctrl(&buffer[..max_len]) {
+                input.extend_from_slice(&buffer[..pos]);
                 break;
+            } else {
+                input.extend_from_slice(&buffer[..max_len])
             }
         }
 
-        let password = String::from_utf16(&input).expect("Found invalid UTF-16 data");
+        let password = match String::from_utf16(&input) {
+            Ok(s) => s,
+            Err(_) => {
+                input.iter_mut().for_each(|d| *d = 0x00);
+                buffer.iter_mut().for_each(|d| *d = 0x00);
+
+                let err =
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, "Found invalid UTF-16");
+                return Err(PromptError::IOError(err));
+            }
+        };
+
+        input.iter_mut().for_each(|d| *d = 0x00);
+        buffer.iter_mut().for_each(|d| *d = 0x00);
 
         Ok(password)
+    }
+
+    // Searches the slice for a CR LF byte sequence. If one is found, return
+    // the position beginning at the CR
+    fn find_ctrl(input: &[u16]) -> Option<usize> {
+        let cr: u16 = 0x000d;
+        let lf: u16 = 0x000a;
+        let mut prev: Option<u16> = None;
+        for (i, c) in input.iter().enumerate() {
+            if *c == lf {
+                if prev.is_some_and(|p| p == cr) {
+                    return Some(i - 1);
+                }
+            }
+
+            prev = Some(*c)
+        }
+
+        None
     }
 }
 
 #[cfg(target_family = "unix")]
 mod unix {
+    use crate::{output, PromptError, Stream};
+
     use libc::{tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
     use std::mem::MaybeUninit;
-
-    use crate::PromptError;
 
     fn set_stdin_echo(echo: bool) -> Result<(), PromptError> {
         let mut tty = MaybeUninit::<termios>::uninit();
@@ -328,9 +429,25 @@ mod unix {
         Ok(())
     }
 
-    /// Read a password from STDIN (excluding newline)
-    pub fn read_password_stdin() -> Result<String, PromptError> {
-        let mut pass = String::new();
+    /// Write the optional prompt to the specified stream.
+    /// Reads the password from STDIN. Does not include the newline.
+    /// The stream must be Stdout or Stderr
+    ///
+    /// # Examples
+    /// ```
+    /// // A typical use case would be to write the prompt to stderr and read
+    /// // the password from stdin while the output of the application is
+    /// // directed to stdout.
+    /// use passterm::{isatty, Stream, prompt_password_stdin};
+    /// if !isatty(Stream::Stdout) {
+    ///     let pass = prompt_password_stdin(Some("Password: "), Stream::Stderr)?;
+    /// }
+    /// ```
+    pub fn prompt_password_stdin(
+        prompt: Option<&str>,
+        stream: Stream,
+    ) -> Result<String, PromptError> {
+        assert!(stream != Stream::Stdin, "Invalid argument for stream");
 
         let is_tty = unsafe { libc::isatty(STDIN_FILENO) == 1 };
 
@@ -339,16 +456,29 @@ mod unix {
             set_stdin_echo(false)?;
         }
 
+        if let Some(p) = prompt {
+            output(p, stream)?;
+        }
+
+        let mut pass = String::new();
         let stdin = std::io::stdin();
         match stdin.read_line(&mut pass) {
             Ok(_) => {}
             Err(e) => {
+                if prompt.is_some() {
+                    output("\n", stream)?;
+                }
+
                 if is_tty {
                     set_stdin_echo(true)?;
                 }
                 return Err(PromptError::IOError(e));
             }
         };
+
+        if prompt.is_some() {
+            output("\n", stream)?;
+        }
 
         if is_tty {
             // Re-enable terminal echo
@@ -362,7 +492,7 @@ mod unix {
 
     /// Write the prompt to the tty and read input from the tty
     /// Returns the String input (excluding newline)
-    pub fn read_password_tty(prompt: &str) -> Result<String, PromptError> {
+    pub fn prompt_password_tty(prompt: &str) -> Result<String, PromptError> {
         unimplemented!();
     }
 }

@@ -1,8 +1,7 @@
 // Copyright 2021-2023 Kyle Schreiber
 // SPDX-License-Identifier: BSD-3-Clause
 
-use passterm::{prompt_password_tty, read_password_stdin};
-use std::io::Write;
+use passterm::{prompt_password_stdin, prompt_password_tty, Stream};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     prompt_stdin()?;
@@ -12,17 +11,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn prompt_stdin() -> Result<(), Box<dyn std::error::Error>> {
-    print!("stdin password: ");
-    std::io::stdout().flush()?;
-    let pass = read_password_stdin()?;
-    println!();
+    let pass = prompt_password_stdin(Some("Stdin Password: "), Stream::Stdout)?;
     println!("You entered: {}", &pass);
 
     Ok(())
 }
 
 fn prompt_tty() -> Result<(), Box<dyn std::error::Error>> {
-    let pass = prompt_password_tty("Tty password: ")?;
+    let pass = prompt_password_tty(Some("Tty password: "))?;
     println!("You entered: {}", &pass);
 
     Ok(())

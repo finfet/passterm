@@ -17,9 +17,8 @@ Example: Get a password
 
 ```rust
 use passterm::prompt_password_tty;
-use std::io::Write;
 
-let pass = prompt_password_tty("Password: ")?;
+let pass = prompt_password_tty(Some("Password: "))?;
 
 println!("Your password is: {}", &pass);
 ```
