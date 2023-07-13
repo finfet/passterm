@@ -37,6 +37,7 @@ pub use crate::tty::isatty;
 pub enum PromptError {
     EnableFailed(std::io::Error),
     IOError(std::io::Error),
+    InvalidArgument,
 }
 
 impl std::fmt::Display for PromptError {
@@ -44,6 +45,7 @@ impl std::fmt::Display for PromptError {
         match self {
             PromptError::EnableFailed(e) => write!(f, "Could not re-enable echo: {}", e),
             PromptError::IOError(e) => e.fmt(f),
+            PromptError::InvalidArgument => write!(f, "Invalid arugment Stdin"),
         }
     }
 }
@@ -59,6 +61,7 @@ impl Error for PromptError {
         match self {
             PromptError::EnableFailed(e) => Some(e),
             PromptError::IOError(e) => Some(e),
+            PromptError::InvalidArgument => None,
         }
     }
 }
@@ -101,7 +104,7 @@ mod windows {
     fn set_stdin_echo(echo: bool, handle: HANDLE) -> Result<(), PromptError> {
         let mut mode: CONSOLE_MODE = 0;
         unsafe {
-            if GetConsoleMode(handle, &mut mode as *mut CONSOLE_MODE) == 0 {
+            if GetConsoleMode(handle, &mut mode as *mut CONSOLE_MODE) == FALSE {
                 return Err(PromptError::IOError(std::io::Error::last_os_error()));
             }
         }
@@ -113,7 +116,7 @@ mod windows {
         }
 
         unsafe {
-            if SetConsoleMode(handle, mode) == 0 {
+            if SetConsoleMode(handle, mode) == FALSE {
                 let err = std::io::Error::last_os_error();
                 if echo {
                     return Err(PromptError::EnableFailed(err));
@@ -144,7 +147,9 @@ mod windows {
         prompt: Option<&str>,
         stream: Stream,
     ) -> Result<String, PromptError> {
-        assert!(stream != Stream::Stdin, "Invalid argument for stream");
+        if stream == Stream::Stdin {
+            return Err(PromptError::InvalidArgument);
+        }
 
         let handle: HANDLE = unsafe {
             let handle = GetStdHandle(STD_INPUT_HANDLE);
@@ -204,7 +209,7 @@ mod windows {
             set_stdin_echo(true, handle)?;
         }
 
-        pass = pass.trim().to_string();
+        pass.retain(|c| c != '\r' && c != '\n');
 
         Ok(pass)
     }
@@ -345,7 +350,7 @@ mod windows {
             }
 
             let max_len = std::cmp::min(num_read, buffer.len() as u32) as usize;
-            if let Some(pos) = find_ctrl(&buffer[..max_len]) {
+            if let Some(pos) = find_crlf(&buffer[..max_len]) {
                 input.extend_from_slice(&buffer[..pos]);
                 break;
             } else {
@@ -371,9 +376,9 @@ mod windows {
         Ok(password)
     }
 
-    // Searches the slice for a CR LF byte sequence. If one is found, return
-    // the position beginning at the CR
-    fn find_ctrl(input: &[u16]) -> Option<usize> {
+    // Searches the slice for a CRLF or LF byte sequence. If a CRLF or only LF
+    // is found, return its position.
+    fn find_crlf(input: &[u16]) -> Option<usize> {
         let cr: u16 = 0x000d;
         let lf: u16 = 0x000a;
         let mut prev: Option<u16> = None;
@@ -381,6 +386,8 @@ mod windows {
             if *c == lf {
                 if prev.is_some_and(|p| p == cr) {
                     return Some(i - 1);
+                } else {
+                    return Some(i);
                 }
             }
 
@@ -447,7 +454,9 @@ mod unix {
         prompt: Option<&str>,
         stream: Stream,
     ) -> Result<String, PromptError> {
-        assert!(stream != Stream::Stdin, "Invalid argument for stream");
+        if stream == Stream::Stdin {
+            return Err(PromptError::InvalidArgument);
+        }
 
         let is_tty = unsafe { libc::isatty(STDIN_FILENO) == 1 };
 
@@ -485,7 +494,7 @@ mod unix {
             set_stdin_echo(true)?;
         }
 
-        pass = pass.trim().to_string();
+        pass.retain(|c| c != '\n');
 
         Ok(pass)
     }
