@@ -66,7 +66,7 @@ impl Error for PromptError {
     }
 }
 
-fn output(prompt: &str, stream: Stream) -> Result<(), PromptError> {
+fn print_stream(prompt: &str, stream: Stream) -> Result<(), PromptError> {
     use std::io::Write;
 
     if stream == Stream::Stdout {
@@ -80,9 +80,17 @@ fn output(prompt: &str, stream: Stream) -> Result<(), PromptError> {
     Ok(())
 }
 
+/// Strip the trailing newline
+fn strip_newline(input: &str) -> &str {
+    input
+        .strip_suffix("\r\n")
+        .or(input.strip_suffix("\n"))
+        .unwrap_or(input)
+}
+
 #[cfg(target_family = "windows")]
 mod windows {
-    use crate::{output, PromptError, Stream};
+    use crate::{print_stream, strip_newline, PromptError, Stream};
 
     use windows_sys::Win32::Foundation::{
         CloseHandle, BOOL, FALSE, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
@@ -179,7 +187,7 @@ mod windows {
         }
 
         if let Some(p) = prompt {
-            output(p, stream)?;
+            print_stream(p, stream)?;
         }
 
         // The rust docs for std::io::Stdin note that windows does not
@@ -190,7 +198,7 @@ mod windows {
             Ok(_) => {}
             Err(e) => {
                 if prompt.is_some() {
-                    output("\n", stream)?;
+                    print_stream("\n", stream)?;
                 }
 
                 if console {
@@ -201,7 +209,7 @@ mod windows {
         };
 
         if prompt.is_some() {
-            output("\n", stream)?;
+            print_stream("\n", stream)?;
         }
 
         if console {
@@ -209,7 +217,7 @@ mod windows {
             set_stdin_echo(true, handle)?;
         }
 
-        pass.retain(|c| c != '\r' && c != '\n');
+        let pass = strip_newline(&pass).to_string();
 
         Ok(pass)
     }
@@ -400,7 +408,7 @@ mod windows {
 
 #[cfg(target_family = "unix")]
 mod unix {
-    use crate::{output, PromptError, Stream};
+    use crate::{print_stream, strip_newline, PromptError, Stream};
 
     use libc::{tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
     use std::mem::MaybeUninit;
@@ -466,7 +474,7 @@ mod unix {
         }
 
         if let Some(p) = prompt {
-            output(p, stream)?;
+            print_stream(p, stream)?;
         }
 
         let mut pass = String::new();
@@ -475,7 +483,7 @@ mod unix {
             Ok(_) => {}
             Err(e) => {
                 if prompt.is_some() {
-                    output("\n", stream)?;
+                    print_stream("\n", stream)?;
                 }
 
                 if is_tty {
@@ -486,7 +494,7 @@ mod unix {
         };
 
         if prompt.is_some() {
-            output("\n", stream)?;
+            print_stream("\n", stream)?;
         }
 
         if is_tty {
@@ -494,7 +502,7 @@ mod unix {
             set_stdin_echo(true)?;
         }
 
-        pass.retain(|c| c != '\n');
+        let pass = strip_newline(&pass).to_string();
 
         Ok(pass)
     }
@@ -503,5 +511,17 @@ mod unix {
     /// Returns the String input (excluding newline)
     pub fn prompt_password_tty(prompt: &str) -> Result<String, PromptError> {
         unimplemented!();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_newline;
+
+    #[test]
+    fn test_strip_newline() {
+        assert_eq!(strip_newline("hello\r\n"), "hello");
+        assert_eq!(strip_newline("hello\n"), "hello");
+        assert_eq!(strip_newline("hello"), "hello");
     }
 }
