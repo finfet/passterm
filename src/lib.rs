@@ -16,13 +16,18 @@ use std::error::Error;
 
 #[cfg(target_family = "windows")]
 pub use crate::windows::prompt_password_stdin;
+
+#[cfg(target_family = "windows")]
 pub use crate::windows::prompt_password_tty;
 
 #[cfg(target_family = "windows")]
 pub use crate::tty::isatty;
 
 #[cfg(target_family = "unix")]
-pub use crate::unix::read_password_stdin;
+pub use crate::unix::prompt_password_stdin;
+
+#[cfg(target_family = "unix")]
+pub use crate::unix::prompt_password_tty;
 
 #[cfg(target_family = "unix")]
 pub use crate::tty::isatty;
@@ -109,7 +114,7 @@ mod windows {
         }
     }
 
-    fn set_stdin_echo(echo: bool, handle: HANDLE) -> Result<(), PromptError> {
+    fn set_echo(echo: bool, handle: HANDLE) -> Result<(), PromptError> {
         let mut mode: CONSOLE_MODE = 0;
         unsafe {
             if GetConsoleMode(handle, &mut mode as *mut CONSOLE_MODE) == FALSE {
@@ -183,7 +188,7 @@ mod windows {
         // Disable terminal echo if we're in a console, if we're not,
         // stdin was probably piped in.
         if console {
-            set_stdin_echo(false, handle)?;
+            set_echo(false, handle)?;
         }
 
         if let Some(p) = prompt {
@@ -202,7 +207,7 @@ mod windows {
                 }
 
                 if console {
-                    set_stdin_echo(true, handle)?;
+                    set_echo(true, handle)?;
                 }
                 return Err(PromptError::IOError(e));
             }
@@ -214,7 +219,7 @@ mod windows {
 
         if console {
             // Re-enable termianal echo.
-            set_stdin_echo(true, handle)?;
+            set_echo(true, handle)?;
         }
 
         let pass = strip_newline(&pass).to_string();
@@ -222,7 +227,7 @@ mod windows {
         Ok(pass)
     }
 
-    /// Write the prompt to the tty and read input from the tty
+    /// Write the optional prompt to the tty and read input from the tty
     /// Returns the String input (excluding newline)
     pub fn prompt_password_tty(prompt: Option<&str>) -> Result<String, PromptError> {
         let console_in: HANDLE = unsafe {
@@ -278,7 +283,7 @@ mod windows {
             write_console(console_out.unwrap(), prompt.unwrap())?;
         }
 
-        set_stdin_echo(false, console_in)?;
+        set_echo(false, console_in)?;
         let password = match read_console(console_in) {
             Ok(p) => p,
             Err(e) => {
@@ -286,11 +291,11 @@ mod windows {
                     // Write a \r\n to the console because echo was disabled.
                     let crlf = String::from_utf8(vec![0x0d, 0x0a]).unwrap();
                     if let Err(e) = write_console(console_out.unwrap(), &crlf) {
-                        set_stdin_echo(true, console_in)?;
+                        set_echo(true, console_in)?;
                         return Err(e);
                     }
                 }
-                set_stdin_echo(true, console_in)?;
+                set_echo(true, console_in)?;
                 return Err(e);
             }
         };
@@ -299,12 +304,12 @@ mod windows {
             // Write a \r\n to the console because echo was disabled.
             let crlf = String::from_utf8(vec![0x0d, 0x0a]).unwrap();
             if let Err(e) = write_console(console_out.unwrap(), &crlf) {
-                set_stdin_echo(true, console_in)?;
+                set_echo(true, console_in)?;
                 return Err(e);
             }
         }
 
-        set_stdin_echo(true, console_in)?;
+        set_echo(true, console_in)?;
 
         Ok(password)
     }
@@ -411,12 +416,15 @@ mod unix {
     use crate::{print_stream, strip_newline, PromptError, Stream};
 
     use libc::{tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
+    use std::fs::{File, OpenOptions};
+    use std::io::{BufRead, BufReader, Write};
     use std::mem::MaybeUninit;
+    use std::os::fd::AsRawFd;
 
-    fn set_stdin_echo(echo: bool) -> Result<(), PromptError> {
+    fn set_echo(echo: bool, fd: i32) -> Result<(), PromptError> {
         let mut tty = MaybeUninit::<termios>::uninit();
         unsafe {
-            if tcgetattr(STDIN_FILENO, tty.as_mut_ptr()) != 0 {
+            if tcgetattr(fd, tty.as_mut_ptr()) != 0 {
                 return Err(PromptError::IOError(std::io::Error::last_os_error()));
             }
         }
@@ -431,7 +439,7 @@ mod unix {
 
         unsafe {
             let tty_ptr: *const termios = &tty;
-            if tcsetattr(STDIN_FILENO, TCSANOW, tty_ptr) != 0 {
+            if tcsetattr(fd, TCSANOW, tty_ptr) != 0 {
                 let err = std::io::Error::last_os_error();
                 if echo {
                     return Err(PromptError::EnableFailed(err));
@@ -470,7 +478,7 @@ mod unix {
 
         if is_tty {
             // Disable terminal echo
-            set_stdin_echo(false)?;
+            set_echo(false, STDIN_FILENO)?;
         }
 
         if let Some(p) = prompt {
@@ -487,7 +495,7 @@ mod unix {
                 }
 
                 if is_tty {
-                    set_stdin_echo(true)?;
+                    set_echo(true, STDIN_FILENO)?;
                 }
                 return Err(PromptError::IOError(e));
             }
@@ -499,7 +507,7 @@ mod unix {
 
         if is_tty {
             // Re-enable terminal echo
-            set_stdin_echo(true)?;
+            set_echo(true, STDIN_FILENO)?;
         }
 
         let pass = strip_newline(&pass).to_string();
@@ -507,10 +515,49 @@ mod unix {
         Ok(pass)
     }
 
-    /// Write the prompt to the tty and read input from the tty
+    /// Write the optional prompt to the tty and read input from the tty
     /// Returns the String input (excluding newline)
-    pub fn prompt_password_tty(prompt: &str) -> Result<String, PromptError> {
-        unimplemented!();
+    pub fn prompt_password_tty(prompt: Option<&str>) -> Result<String, PromptError> {
+        if let Some(p) = prompt {
+            write_tty(p)?;
+        }
+
+        let tty = File::open("/dev/tty")?;
+        let tty_fd = tty.as_raw_fd();
+        let mut pass = String::new();
+        set_echo(false, tty_fd)?;
+        let mut reader = BufReader::new(tty);
+        if let Err(e) = reader.read_line(&mut pass) {
+            if prompt.is_some() {
+                if let Err(e) = write_tty("\n") {
+                    set_echo(true, tty_fd)?;
+                    return Err(e.into());
+                }
+            }
+            set_echo(true, tty_fd)?;
+            return Err(e.into());
+        }
+
+        if prompt.is_some() {
+            if let Err(e) = write_tty("\n") {
+                set_echo(true, tty_fd)?;
+                return Err(e.into());
+            }
+        }
+
+        set_echo(true, tty_fd)?;
+
+        let pass = strip_newline(&pass).to_string();
+
+        Ok(pass)
+    }
+
+    fn write_tty(prompt: &str) -> Result<(), std::io::Error> {
+        let mut tty = OpenOptions::new().write(true).open("/dev/tty")?;
+        tty.write_all(prompt.as_bytes())?;
+        tty.flush()?;
+
+        Ok(())
     }
 }
 
