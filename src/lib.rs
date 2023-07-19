@@ -9,10 +9,13 @@
 //! Use the [`isatty()`] function to check if the given stream
 //! is a tty.
 
+#![allow(dead_code)]
+
 mod tty;
 
 pub use crate::tty::Stream;
 use std::error::Error;
+use std::io::Read;
 
 #[cfg(target_family = "windows")]
 pub use crate::windows::prompt_password_stdin;
@@ -71,6 +74,7 @@ impl Error for PromptError {
     }
 }
 
+/// Write the prompt to the specified [`crate::tty:Steam`]
 fn print_stream(prompt: &str, stream: Stream) -> Result<(), PromptError> {
     use std::io::Write;
 
@@ -89,13 +93,92 @@ fn print_stream(prompt: &str, stream: Stream) -> Result<(), PromptError> {
 fn strip_newline(input: &str) -> &str {
     input
         .strip_suffix("\r\n")
-        .or(input.strip_suffix("\n"))
+        .or(input.strip_suffix('\n'))
         .unwrap_or(input)
+}
+
+/// Searches the slice for a CRLF or LF byte sequence. If a CRLF or only LF
+/// is found, return its position.
+fn find_crlf(input: &[u16]) -> Option<usize> {
+    let cr: u16 = 0x000d;
+    let lf: u16 = 0x000a;
+    let mut prev: Option<u16> = None;
+    for (i, c) in input.iter().enumerate() {
+        if *c == lf {
+            if prev.is_some_and(|p| p == cr) {
+                return Some(i - 1);
+            } else {
+                return Some(i);
+            }
+        }
+
+        prev = Some(*c)
+    }
+
+    None
+}
+
+/// Read data from the buffer until a LF (0x0a) character is found.
+/// Returns the data as a string (including newline). Note that the input
+/// data must contain an LF or this function will loop indefinitely.
+///
+/// Returns an error if the data is invalid UTF-8. Note
+fn read_line<T: Read>(mut source: T) -> Result<String, std::io::Error> {
+    let mut data_read = Vec::<u8>::new();
+    let mut buffer: [u8; 64] = [0; 64];
+    loop {
+        let n = match source.read(&mut buffer) {
+            Ok(n) => n,
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::Interrupted => continue,
+                _ => {
+                    data_read.iter_mut().for_each(|d| *d = 0x00);
+                    buffer.iter_mut().for_each(|d| *d = 0x00);
+                    return Err(e);
+                }
+            },
+        };
+
+        if let Some(pos) = find_lf(&buffer[..n]) {
+            data_read.extend_from_slice(&buffer[..pos + 1]);
+            break;
+        } else {
+            data_read.extend_from_slice(&buffer[..n]);
+        }
+    }
+
+    let password = match String::from_utf8(data_read) {
+        Ok(p) => p,
+        Err(_) => {
+            buffer.iter_mut().for_each(|d| *d = 0x00);
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Found invalid UTF-8",
+            ));
+        }
+    };
+
+    buffer.iter_mut().for_each(|d| *d = 0x00);
+
+    Ok(password)
+}
+
+/// Find a LF (0x0a) in the specified buffer.
+/// If found, returns the position of the LF
+fn find_lf(input: &[u8]) -> Option<usize> {
+    let lf: u8 = 0x0a;
+    for (i, b) in input.iter().enumerate() {
+        if *b == lf {
+            return Some(i);
+        }
+    }
+
+    None
 }
 
 #[cfg(target_family = "windows")]
 mod windows {
-    use crate::{print_stream, strip_newline, PromptError, Stream};
+    use crate::{find_crlf, print_stream, strip_newline, PromptError, Stream};
 
     use windows_sys::Win32::Foundation::{
         CloseHandle, BOOL, FALSE, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
@@ -311,6 +394,8 @@ mod windows {
 
         set_echo(true, console_in)?;
 
+        let password = strip_newline(&password).to_string();
+
         Ok(password)
     }
 
@@ -388,36 +473,15 @@ mod windows {
 
         Ok(password)
     }
-
-    // Searches the slice for a CRLF or LF byte sequence. If a CRLF or only LF
-    // is found, return its position.
-    fn find_crlf(input: &[u16]) -> Option<usize> {
-        let cr: u16 = 0x000d;
-        let lf: u16 = 0x000a;
-        let mut prev: Option<u16> = None;
-        for (i, c) in input.iter().enumerate() {
-            if *c == lf {
-                if prev.is_some_and(|p| p == cr) {
-                    return Some(i - 1);
-                } else {
-                    return Some(i);
-                }
-            }
-
-            prev = Some(*c)
-        }
-
-        None
-    }
 }
 
 #[cfg(target_family = "unix")]
 mod unix {
-    use crate::{print_stream, strip_newline, PromptError, Stream};
+    use crate::{print_stream, read_line, strip_newline, PromptError, Stream};
 
     use libc::{tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
-    use std::fs::{File, OpenOptions};
-    use std::io::{BufRead, BufReader, Write};
+    use std::fs::OpenOptions;
+    use std::io::Write;
     use std::mem::MaybeUninit;
     use std::os::fd::AsRawFd;
 
@@ -518,28 +582,32 @@ mod unix {
     /// Write the optional prompt to the tty and read input from the tty
     /// Returns the String input (excluding newline)
     pub fn prompt_password_tty(prompt: Option<&str>) -> Result<String, PromptError> {
+        let mut tty = OpenOptions::new()
+            .read(true)
+            .write(prompt.is_some())
+            .open("/dev/tty")?;
         if let Some(p) = prompt {
-            write_tty(p)?;
+            write_tty(p, &mut tty)?;
         }
 
-        let tty = File::open("/dev/tty")?;
         let tty_fd = tty.as_raw_fd();
-        let mut pass = String::new();
         set_echo(false, tty_fd)?;
-        let mut reader = BufReader::new(tty);
-        if let Err(e) = reader.read_line(&mut pass) {
-            if prompt.is_some() {
-                if let Err(e) = write_tty("\n") {
-                    set_echo(true, tty_fd)?;
-                    return Err(e.into());
+        let password = match read_line(&mut tty) {
+            Ok(p) => p,
+            Err(e) => {
+                if prompt.is_some() {
+                    if let Err(e) = write_tty("\n", &mut tty) {
+                        set_echo(true, tty_fd)?;
+                        return Err(e.into());
+                    }
                 }
+                set_echo(true, tty_fd)?;
+                return Err(e.into());
             }
-            set_echo(true, tty_fd)?;
-            return Err(e.into());
-        }
+        };
 
         if prompt.is_some() {
-            if let Err(e) = write_tty("\n") {
+            if let Err(e) = write_tty("\n", &mut tty) {
                 set_echo(true, tty_fd)?;
                 return Err(e.into());
             }
@@ -547,13 +615,12 @@ mod unix {
 
         set_echo(true, tty_fd)?;
 
-        let pass = strip_newline(&pass).to_string();
+        let password = strip_newline(&password).to_string();
 
-        Ok(pass)
+        Ok(password)
     }
 
-    fn write_tty(prompt: &str) -> Result<(), std::io::Error> {
-        let mut tty = OpenOptions::new().write(true).open("/dev/tty")?;
+    fn write_tty<T: Write>(prompt: &str, tty: &mut T) -> Result<(), std::io::Error> {
         tty.write_all(prompt.as_bytes())?;
         tty.flush()?;
 
@@ -563,12 +630,40 @@ mod unix {
 
 #[cfg(test)]
 mod tests {
-    use super::strip_newline;
+    use super::{find_crlf, find_lf, read_line, strip_newline};
 
     #[test]
     fn test_strip_newline() {
         assert_eq!(strip_newline("hello\r\n"), "hello");
         assert_eq!(strip_newline("hello\n"), "hello");
         assert_eq!(strip_newline("hello"), "hello");
+    }
+
+    #[test]
+    fn test_find_lf() {
+        let input = [0x41, 0x42, 0x43, 0x0a];
+        let input2 = [0x41, 0x42, 0x43];
+        assert_eq!(find_lf(&input), Some(3));
+        assert_eq!(find_lf(&input2), None);
+    }
+
+    #[test]
+    fn test_find_crlf() {
+        let input = [0x006d, 0x0075, 0x0073, 0x0069, 0x0063, 0x000d, 0x000a];
+        let input2 = [0x006d, 0x0075, 0x0073, 0x0069, 0x0063];
+        assert_eq!(find_crlf(&input), Some(5));
+        assert_eq!(find_crlf(&input2), None);
+    }
+
+    #[test]
+    fn test_read_line() -> Result<(), String> {
+        let line = "Hello\n".to_string();
+        let pass = match read_line(line.as_bytes()) {
+            Ok(p) => p,
+            Err(e) => return Err(e.to_string()),
+        };
+        assert_eq!(pass, line);
+
+        Ok(())
     }
 }
