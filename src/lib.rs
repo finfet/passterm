@@ -9,8 +9,6 @@
 //! Use the [`isatty()`] function to check if the given stream
 //! is a tty.
 
-#![allow(dead_code)]
-
 mod tty;
 
 pub use crate::tty::Stream;
@@ -99,6 +97,8 @@ fn strip_newline(input: &str) -> &str {
 
 /// Searches the slice for a CRLF or LF byte sequence. If a CRLF or only LF
 /// is found, return its position.
+
+#[allow(dead_code)]
 fn find_crlf(input: &[u16]) -> Option<usize> {
     let cr: u16 = 0x000d;
     let lf: u16 = 0x000a;
@@ -122,7 +122,8 @@ fn find_crlf(input: &[u16]) -> Option<usize> {
 /// Returns the data as a string (including newline). Note that the input
 /// data must contain an LF or this function will loop indefinitely.
 ///
-/// Returns an error if the data is invalid UTF-8. Note
+/// Returns an error if the data is invalid UTF-8.
+#[allow(dead_code)]
 fn read_line<T: Read>(mut source: T) -> Result<String, std::io::Error> {
     let mut data_read = Vec::<u8>::new();
     let mut buffer: [u8; 64] = [0; 64];
@@ -132,8 +133,6 @@ fn read_line<T: Read>(mut source: T) -> Result<String, std::io::Error> {
             Err(e) => match e.kind() {
                 std::io::ErrorKind::Interrupted => continue,
                 _ => {
-                    data_read.iter_mut().for_each(|d| *d = 0x00);
-                    buffer.iter_mut().for_each(|d| *d = 0x00);
                     return Err(e);
                 }
             },
@@ -150,7 +149,6 @@ fn read_line<T: Read>(mut source: T) -> Result<String, std::io::Error> {
     let password = match String::from_utf8(data_read) {
         Ok(p) => p,
         Err(_) => {
-            buffer.iter_mut().for_each(|d| *d = 0x00);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Found invalid UTF-8",
@@ -158,13 +156,12 @@ fn read_line<T: Read>(mut source: T) -> Result<String, std::io::Error> {
         }
     };
 
-    buffer.iter_mut().for_each(|d| *d = 0x00);
-
     Ok(password)
 }
 
 /// Find a LF (0x0a) in the specified buffer.
 /// If found, returns the position of the LF
+#[allow(dead_code)]
 fn find_lf(input: &[u8]) -> Option<usize> {
     let lf: u8 = 0x0a;
     for (i, b) in input.iter().enumerate() {
@@ -440,9 +437,6 @@ mod windows {
             };
 
             if res == FALSE {
-                input.iter_mut().for_each(|d| *d = 0x00);
-                buffer.iter_mut().for_each(|d| *d = 0x00);
-
                 let err = std::io::Error::last_os_error();
                 return Err(PromptError::IOError(err));
             }
@@ -459,17 +453,11 @@ mod windows {
         let password = match String::from_utf16(&input) {
             Ok(s) => s,
             Err(_) => {
-                input.iter_mut().for_each(|d| *d = 0x00);
-                buffer.iter_mut().for_each(|d| *d = 0x00);
-
                 let err =
                     std::io::Error::new(std::io::ErrorKind::InvalidData, "Found invalid UTF-16");
                 return Err(PromptError::IOError(err));
             }
         };
-
-        input.iter_mut().for_each(|d| *d = 0x00);
-        buffer.iter_mut().for_each(|d| *d = 0x00);
 
         Ok(password)
     }
@@ -527,7 +515,7 @@ mod unix {
     /// // directed to stdout.
     /// use passterm::{isatty, Stream, prompt_password_stdin};
     /// if !isatty(Stream::Stdout) {
-    ///     let pass = prompt_password_stdin(Some("Password: "), Stream::Stderr)?;
+    ///     let pass = prompt_password_stdin(Some("Password: "), Stream::Stderr).unwrap();
     /// }
     /// ```
     pub fn prompt_password_stdin(

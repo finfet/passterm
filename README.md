@@ -18,7 +18,7 @@ Example: Get a password
 ```rust
 use passterm::prompt_password_tty;
 
-let pass = prompt_password_tty(Some("Password: "))?;
+let pass = prompt_password_tty(Some("Password: ")).unwrap();
 
 println!("Your password is: {}", &pass);
 ```
