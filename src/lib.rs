@@ -438,7 +438,7 @@ mod windows {
         #[cfg(not(feature = "secure_zero"))]
         let mut input: Vec<u16> = Vec::new();
         #[cfg(not(feature = "secure_zero"))]
-        let mut buffer: [u8; 64] = [0; 64];
+        let mut buffer: [u16; 64] = [0; 64];
 
         loop {
             let mut num_read: u32 = 0;
