@@ -1,13 +1,15 @@
 // Copyright 2021-2023 Kyle Schreiber
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Terminal utilities
+//! # Terminal utilities
 //!
-//! Use the [`read_password()`] function to read a line from stdin with
-//! echo disabled.
+//! Use the [`prompt_password_tty`] function to read a password from the tty.
 //!
-//! Use the [`isatty()`] function to check if the given stream
+//! Use the [`isatty`] function to check if the given stream
 //! is a tty.
+//!
+//! ## Features
+//! Enable the `secure_zero` feature to zero out data read from the tty.
 
 mod tty;
 
@@ -125,10 +127,18 @@ fn find_crlf(input: &[u16]) -> Option<usize> {
 /// Returns an error if the data is invalid UTF-8.
 #[allow(dead_code)]
 fn read_line<T: Read>(mut source: T) -> Result<String, std::io::Error> {
+    #[cfg(feature = "secure_zero")]
+    let mut data_read = zeroize::Zeroizing::new(Vec::<u8>::new());
+    #[cfg(feature = "secure_zero")]
+    let mut buffer = zeroize::Zeroizing::new([0u8; 64]);
+
+    #[cfg(not(feature = "secure_zero"))]
     let mut data_read = Vec::<u8>::new();
+    #[cfg(not(feature = "secure_zero"))]
     let mut buffer: [u8; 64] = [0; 64];
+
     loop {
-        let n = match source.read(&mut buffer) {
+        let n = match source.read(buffer.as_mut()) {
             Ok(n) => n,
             Err(e) => match e.kind() {
                 std::io::ErrorKind::Interrupted => continue,
@@ -146,8 +156,8 @@ fn read_line<T: Read>(mut source: T) -> Result<String, std::io::Error> {
         }
     }
 
-    let password = match String::from_utf8(data_read) {
-        Ok(p) => p,
+    let password = match std::str::from_utf8(&data_read) {
+        Ok(p) => p.to_string(),
         Err(_) => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -420,8 +430,15 @@ mod windows {
 
     /// Read from the console
     fn read_console(console_in: HANDLE) -> Result<String, PromptError> {
+        #[cfg(feature = "secure_zero")]
+        let mut input = zeroize::Zeroizing::new(Vec::<u16>::new());
+        #[cfg(feature = "secure_zero")]
+        let mut buffer = zeroize::Zeroizing::new([0u16; 64]);
+
+        #[cfg(not(feature = "secure_zero"))]
         let mut input: Vec<u16> = Vec::new();
-        let mut buffer: [u16; 64] = [0; 64];
+        #[cfg(not(feature = "secure_zero"))]
+        let mut buffer: [u8; 64] = [0; 64];
 
         loop {
             let mut num_read: u32 = 0;
@@ -645,6 +662,19 @@ mod tests {
 
     #[test]
     fn test_read_line() -> Result<(), String> {
+        let line = "Hello\n".to_string();
+        let pass = match read_line(line.as_bytes()) {
+            Ok(p) => p,
+            Err(e) => return Err(e.to_string()),
+        };
+        assert_eq!(pass, line);
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg_attr(not(feature = "secure_zero"), ignore)]
+    fn test_read_line_secure_zero() -> Result<(), String> {
         let line = "Hello\n".to_string();
         let pass = match read_line(line.as_bytes()) {
             Ok(p) => p,
