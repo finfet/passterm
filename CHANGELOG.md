@@ -2,9 +2,10 @@
 
 ## Version 2.0.0
 
-- Unreleased
+2023-07-20
+
 - Rename password functions
-- Add ability to read password from tty
+- Add ability to read a password from the tty
 
 ## Version 1.1.7
 
