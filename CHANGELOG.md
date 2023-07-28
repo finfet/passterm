@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 2.0.1
+
+2023-07-27
+
+- Fix for zeroize on unix targets
+
 ## Version 2.0.0
 
 2023-07-20

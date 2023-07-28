@@ -611,6 +611,9 @@ mod unix {
             }
         };
 
+        #[cfg(feature = "secure_zero")]
+        let password = zeroize::Zeroizing::new(password);
+
         if prompt.is_some() {
             if let Err(e) = write_tty("\n", &mut tty) {
                 set_echo(true, tty_fd)?;
