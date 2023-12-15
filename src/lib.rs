@@ -237,13 +237,13 @@ mod windows {
     /// The stream must be Stdout or Stderr
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
     /// // A typical use case would be to write the prompt to stderr and read
     /// // the password from stdin while the output of the application is
     /// // directed to stdout.
     /// use passterm::{isatty, Stream, prompt_password_stdin};
     /// if !isatty(Stream::Stdout) {
-    ///     let pass = prompt_password_stdin(Some("Password: "), Stream::Stderr)?;
+    ///     let pass = prompt_password_stdin(Some("Password: "), Stream::Stderr).unwrap();
     /// }
     /// ```
     pub fn prompt_password_stdin(
@@ -526,7 +526,7 @@ mod unix {
     /// The stream must be Stdout or Stderr
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
     /// // A typical use case would be to write the prompt to stderr and read
     /// // the password from stdin while the output of the application is
     /// // directed to stdout.

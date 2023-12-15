@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 2.0.2
+
+2023-12-15
+
+- Upgrade dependencies
+
 ## Version 2.0.1
 
 2023-07-27
