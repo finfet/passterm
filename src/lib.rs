@@ -188,17 +188,15 @@ fn find_lf(input: &[u8]) -> Option<usize> {
 
 #[cfg(target_family = "windows")]
 mod windows {
+    use crate::win32::{
+        CloseHandle, CreateFileA, GetConsoleMode, GetFileType, GetStdHandle, ReadConsoleW,
+        SetConsoleMode, WriteConsoleW,
+    };
+    use crate::win32::{
+        BOOL, ENABLE_ECHO_INPUT, FALSE, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
+        OPEN_EXISTING, STD_INPUT_HANDLE,
+    };
     use crate::{find_crlf, print_stream, strip_newline, PromptError, Stream};
-    use crate::win32::{
-        CreateFileA, GetFileType, CloseHandle,
-        GetConsoleMode, GetStdHandle, ReadConsoleW,
-        SetConsoleMode, WriteConsoleW
-    };
-    use crate::win32::{
-        HANDLE, BOOL, FALSE, OPEN_EXISTING,
-        GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE,
-        ENABLE_ECHO_INPUT, STD_INPUT_HANDLE
-    };
 
     struct HandleCloser(HANDLE);
 

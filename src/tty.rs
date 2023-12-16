@@ -18,11 +18,10 @@ pub use crate::tty::unix::isatty;
 #[cfg(target_family = "windows")]
 mod windows {
     use crate::tty::Stream;
-    use crate::win32::{
-        HANDLE, INVALID_HANDLE_VALUE, STD_ERROR_HANDLE,
-        STD_INPUT_HANDLE, STD_OUTPUT_HANDLE
-    };
     use crate::win32::{GetFileType, GetStdHandle};
+    use crate::win32::{
+        HANDLE, INVALID_HANDLE_VALUE, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    };
 
     /// Returns true if the given stream is a tty.
     #[allow(clippy::let_and_return)]

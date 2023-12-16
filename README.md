@@ -10,8 +10,8 @@ functions.
 
 Tested on Linux, macOS, and Windows.
 
-Functions on windows use the new, official windows crate instead of the older
-winapi crate.
+Functions on windows use the windows api directly without relying on large
+crates like windows-sys or winapi.
 
 Example: Get a password
 

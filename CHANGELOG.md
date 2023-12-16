@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 2.0.3
+
+2023-12-15
+
+- Remove usage of windows-sys
+
 ## Version 2.0.2
 
 2023-12-15

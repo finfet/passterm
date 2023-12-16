@@ -21,11 +21,31 @@ pub const FILE_TYPE_CHAR: u32 = 2u32;
 #[link(name = "kernel32", kind = "raw-dylib")]
 extern "system" {
     pub fn CloseHandle(hobject: HANDLE) -> BOOL;
-    pub fn CreateFileA(lpfilename: PCSTR, dwdesiredaccess: u32, dwsharemode: u32, lpsecurityattributes: *const c_void, dwcreationdisposition: u32, dwflagsandattributes: u32, htemplatefile: HANDLE) -> HANDLE;
+    pub fn CreateFileA(
+        lpfilename: PCSTR,
+        dwdesiredaccess: u32,
+        dwsharemode: u32,
+        lpsecurityattributes: *const c_void,
+        dwcreationdisposition: u32,
+        dwflagsandattributes: u32,
+        htemplatefile: HANDLE,
+    ) -> HANDLE;
     pub fn GetFileType(hfile: HANDLE) -> u32;
     pub fn GetConsoleMode(hconsolehandle: HANDLE, lpmode: *mut u32) -> BOOL;
     pub fn GetStdHandle(nstdhandle: u32) -> HANDLE;
-    pub fn ReadConsoleW(hconsoleinput: HANDLE, lpbuffer: *mut c_void, nnumberofcharstoread: u32, lpnumberofcharsread: *mut u32, pinputcontrol: *const c_void) -> BOOL;
+    pub fn ReadConsoleW(
+        hconsoleinput: HANDLE,
+        lpbuffer: *mut c_void,
+        nnumberofcharstoread: u32,
+        lpnumberofcharsread: *mut u32,
+        pinputcontrol: *const c_void,
+    ) -> BOOL;
     pub fn SetConsoleMode(hconsolehandle: HANDLE, dwmode: u32) -> BOOL;
-    pub fn WriteConsoleW(hconsoleoutput: HANDLE, lpbuffer: *const c_void, nnumberofcharstowrite: u32, lpnumberofcharswritten: *mut u32, lpreserved: *const c_void) -> BOOL;
+    pub fn WriteConsoleW(
+        hconsoleoutput: HANDLE,
+        lpbuffer: *const c_void,
+        nnumberofcharstowrite: u32,
+        lpnumberofcharswritten: *mut u32,
+        lpreserved: *const c_void,
+    ) -> BOOL;
 }
