@@ -1,6 +1,6 @@
 [package]
 name = "passterm"
-version = "2.0.2"
+version = "2.0.3"
 edition = "2021"
 authors = [
 	"Kyle Schreiber <kyle@80x24.net>",
@@ -16,9 +16,6 @@ categories = ["command-line-interface"]
 
 [dependencies]
 zeroize = { version = "1.7", optional = true }
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_System_Console", "Win32_Storage_FileSystem", "Win32_Security"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

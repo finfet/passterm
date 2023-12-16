@@ -18,11 +18,11 @@ pub use crate::tty::unix::isatty;
 #[cfg(target_family = "windows")]
 mod windows {
     use crate::tty::Stream;
-    use windows_sys::Win32::Foundation::{HANDLE, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::GetFileType;
-    use windows_sys::Win32::System::Console::{
-        GetStdHandle, STD_ERROR_HANDLE, STD_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    use crate::win32::{
+        HANDLE, INVALID_HANDLE_VALUE, STD_ERROR_HANDLE,
+        STD_INPUT_HANDLE, STD_OUTPUT_HANDLE
     };
+    use crate::win32::{GetFileType, GetStdHandle};
 
     /// Returns true if the given stream is a tty.
     #[allow(clippy::let_and_return)]
@@ -46,13 +46,13 @@ mod windows {
 
         let is_atty = unsafe {
             // Consoles will show as FILE_TYPE_CHAR (0x02)
-            GetFileType(handle) == windows_sys::Win32::Storage::FileSystem::FILE_TYPE_CHAR
+            GetFileType(handle) == crate::win32::FILE_TYPE_CHAR
         };
 
         is_atty
     }
 
-    unsafe fn get_handle(input_handle: STD_HANDLE) -> Result<HANDLE, ()> {
+    unsafe fn get_handle(input_handle: u32) -> Result<HANDLE, ()> {
         let handle = GetStdHandle(input_handle);
         if handle == INVALID_HANDLE_VALUE {
             return Err(());

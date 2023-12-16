@@ -13,6 +13,9 @@
 
 mod tty;
 
+#[cfg(target_family = "windows")]
+mod win32;
+
 pub use crate::tty::Stream;
 use std::error::Error;
 use std::io::Read;
@@ -186,14 +189,15 @@ fn find_lf(input: &[u8]) -> Option<usize> {
 #[cfg(target_family = "windows")]
 mod windows {
     use crate::{find_crlf, print_stream, strip_newline, PromptError, Stream};
-
-    use windows_sys::Win32::Foundation::{
-        CloseHandle, BOOL, FALSE, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
+    use crate::win32::{
+        CreateFileA, GetFileType, CloseHandle,
+        GetConsoleMode, GetStdHandle, ReadConsoleW,
+        SetConsoleMode, WriteConsoleW
     };
-    use windows_sys::Win32::Storage::FileSystem::{CreateFileA, GetFileType, OPEN_EXISTING};
-    use windows_sys::Win32::System::Console::{
-        GetConsoleMode, GetStdHandle, ReadConsoleW, SetConsoleMode, WriteConsoleW, CONSOLE_MODE,
-        ENABLE_ECHO_INPUT, STD_INPUT_HANDLE,
+    use crate::win32::{
+        HANDLE, BOOL, FALSE, OPEN_EXISTING,
+        GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE,
+        ENABLE_ECHO_INPUT, STD_INPUT_HANDLE
     };
 
     struct HandleCloser(HANDLE);
@@ -205,9 +209,9 @@ mod windows {
     }
 
     fn set_echo(echo: bool, handle: HANDLE) -> Result<(), PromptError> {
-        let mut mode: CONSOLE_MODE = 0;
+        let mut mode: u32 = 0;
         unsafe {
-            if GetConsoleMode(handle, &mut mode as *mut CONSOLE_MODE) == FALSE {
+            if GetConsoleMode(handle, &mut mode) == FALSE {
                 return Err(PromptError::IOError(std::io::Error::last_os_error()));
             }
         }
@@ -272,7 +276,7 @@ mod windows {
             // the file type comes back as FILE_TYPE_PIPE 0x03. This means
             // that we can't tell if we're in a pipe or a console, so echo
             // won't be disabled at all.
-            GetFileType(handle) == windows_sys::Win32::Storage::FileSystem::FILE_TYPE_CHAR
+            GetFileType(handle) == crate::win32::FILE_TYPE_CHAR
         };
 
         // Disable terminal echo if we're in a console, if we're not,
