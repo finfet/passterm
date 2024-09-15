@@ -189,22 +189,14 @@ fn find_lf(input: &[u8]) -> Option<usize> {
 #[cfg(target_family = "windows")]
 mod windows {
     use crate::win32::{
-        CloseHandle, CreateFileA, GetConsoleMode, GetFileType, GetStdHandle, ReadConsoleW,
-        SetConsoleMode, WriteConsoleW,
+        GetConsoleMode, GetFileType, GetStdHandle, ReadConsoleW, SetConsoleMode, WriteConsoleW,
     };
-    use crate::win32::{
-        BOOL, ENABLE_ECHO_INPUT, FALSE, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
-        OPEN_EXISTING, STD_INPUT_HANDLE,
-    };
+    use crate::win32::{BOOL, ENABLE_ECHO_INPUT, FALSE, INVALID_HANDLE_VALUE, STD_INPUT_HANDLE};
     use crate::{find_crlf, print_stream, strip_newline, PromptError, Stream};
 
-    struct HandleCloser(HANDLE);
-
-    impl Drop for HandleCloser {
-        fn drop(&mut self) {
-            unsafe { CloseHandle(self.0) };
-        }
-    }
+    use std::fs::OpenOptions;
+    use std::os::windows::io::AsRawHandle;
+    use std::os::windows::raw::HANDLE;
 
     fn set_echo(echo: bool, handle: HANDLE) -> Result<(), PromptError> {
         let mut mode: u32 = 0;
@@ -258,15 +250,13 @@ mod windows {
 
         let handle: HANDLE = unsafe {
             let handle = GetStdHandle(STD_INPUT_HANDLE);
-            if handle == INVALID_HANDLE_VALUE {
+            if handle.is_null() || handle == INVALID_HANDLE_VALUE {
                 let err = std::io::Error::last_os_error();
                 return Err(PromptError::IOError(err));
             }
 
             handle
         };
-
-        let _handle_closer = HandleCloser(handle);
 
         let console = unsafe {
             // FILE_TYPE_CHAR is 0x0002 which is a console
@@ -322,86 +312,45 @@ mod windows {
     /// Write the optional prompt to the tty and read input from the tty
     /// Returns the String input (excluding newline)
     pub fn prompt_password_tty(prompt: Option<&str>) -> Result<String, PromptError> {
-        let console_in: HANDLE = unsafe {
-            let handle = CreateFileA(
-                b"CONIN$\x00".as_ptr(), // null terminated name
-                GENERIC_READ | GENERIC_WRITE,
-                0,
-                std::ptr::null(),
-                OPEN_EXISTING,
-                0,
-                0,
-            );
-            if handle == INVALID_HANDLE_VALUE {
-                let err = std::io::Error::last_os_error();
-                return Err(PromptError::IOError(err));
-            }
+        let console_in = OpenOptions::new().read(true).write(true).open("CONIN$")?;
 
-            handle
-        };
-
-        let _console_in_closer = HandleCloser(console_in);
-
-        let console_out: Option<HANDLE> = if prompt.is_some() {
-            let console_out: HANDLE = unsafe {
-                let handle = CreateFileA(
-                    b"CONOUT$\x00".as_ptr(), // null terminated name
-                    GENERIC_WRITE,
-                    0,
-                    std::ptr::null(),
-                    OPEN_EXISTING,
-                    0,
-                    0,
-                );
-                if handle == INVALID_HANDLE_VALUE {
-                    let err = std::io::Error::last_os_error();
-                    return Err(PromptError::IOError(err));
-                }
-
-                handle
-            };
+        let console_out = if prompt.is_some() {
+            let console_out = OpenOptions::new().write(true).open("CONOUT$")?;
 
             Some(console_out)
         } else {
             None
         };
 
-        let _console_out_closer: Option<HandleCloser> = match console_out {
-            Some(c) => Some(HandleCloser(c)),
-            None => None,
-        };
-
-        if prompt.is_some() {
-            write_console(console_out.unwrap(), prompt.unwrap())?;
+        if let Some(out) = &console_out {
+            write_console(out.as_raw_handle(), prompt.unwrap())?;
         }
 
-        set_echo(false, console_in)?;
-        let password = match read_console(console_in) {
+        set_echo(false, console_in.as_raw_handle())?;
+        let password = match read_console(console_in.as_raw_handle()) {
             Ok(p) => p,
             Err(e) => {
-                if prompt.is_some() {
+                if let Some(out) = &console_out {
                     // Write a \r\n to the console because echo was disabled.
-                    let crlf = String::from_utf8(vec![0x0d, 0x0a]).unwrap();
-                    if let Err(e) = write_console(console_out.unwrap(), &crlf) {
-                        set_echo(true, console_in)?;
+                    if let Err(e) = write_console(out.as_raw_handle(), "\r\n") {
+                        set_echo(true, console_in.as_raw_handle())?;
                         return Err(e);
                     }
                 }
-                set_echo(true, console_in)?;
+                set_echo(true, console_in.as_raw_handle())?;
                 return Err(e);
             }
         };
 
-        if prompt.is_some() {
+        if let Some(out) = &console_out {
             // Write a \r\n to the console because echo was disabled.
-            let crlf = String::from_utf8(vec![0x0d, 0x0a]).unwrap();
-            if let Err(e) = write_console(console_out.unwrap(), &crlf) {
-                set_echo(true, console_in)?;
+            if let Err(e) = write_console(out.as_raw_handle(), "\r\n") {
+                set_echo(true, console_in.as_raw_handle())?;
                 return Err(e);
             }
         }
 
-        set_echo(true, console_in)?;
+        set_echo(true, console_in.as_raw_handle())?;
 
         let password = strip_newline(&password).to_string();
 
