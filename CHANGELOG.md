@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 2.0.4
+
+2024-10-27
+
+- Various windows fixes. Add check for null stdin handle, and avoid closing it
+- Upgrade zeroize version
+
 ## Version 2.0.3
 
 2023-12-15

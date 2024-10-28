@@ -1,6 +1,6 @@
 [package]
 name = "passterm"
-version = "2.0.3"
+version = "2.0.4"
 edition = "2021"
 authors = [
 	"Kyle Schreiber <kyle@80x24.net>",
@@ -15,7 +15,7 @@ keywords = ["tty", "password", "security", "isatty", "getpass"]
 categories = ["command-line-interface"]
 
 [dependencies]
-zeroize = { version = "1.7", optional = true }
+zeroize = { version = "1.8", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
