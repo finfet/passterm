@@ -93,6 +93,7 @@ fn print_stream(prompt: &str, stream: Stream) -> Result<(), PromptError> {
 }
 
 /// Strip the trailing newline
+#[allow(dead_code)]
 fn strip_newline(input: &str) -> &str {
     input
         .strip_suffix("\r\n")
@@ -102,7 +103,6 @@ fn strip_newline(input: &str) -> &str {
 
 /// Searches the slice for a CRLF or LF byte sequence. If a CRLF or only LF
 /// is found, return its position.
-
 #[allow(dead_code)]
 fn find_crlf(input: &[u16]) -> Option<usize> {
     let cr: u16 = 0x000d;
@@ -189,37 +189,48 @@ fn find_lf(input: &[u8]) -> Option<usize> {
 #[cfg(target_family = "windows")]
 mod windows {
     use crate::win32::{
-        GetConsoleMode, GetFileType, GetStdHandle, ReadConsoleW, SetConsoleMode, WriteConsoleW,
+        GetConsoleMode, GetStdHandle, ReadConsoleW, SetConsoleMode, WriteConsoleW,
+        ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT,
     };
     use crate::win32::{BOOL, ENABLE_ECHO_INPUT, FALSE, INVALID_HANDLE_VALUE, STD_INPUT_HANDLE};
-    use crate::{find_crlf, print_stream, strip_newline, PromptError, Stream};
+    use crate::{print_stream, PromptError, Stream};
 
     use std::fs::OpenOptions;
     use std::os::windows::io::AsRawHandle;
     use std::os::windows::raw::HANDLE;
 
-    fn set_echo(echo: bool, handle: HANDLE) -> Result<(), PromptError> {
+    // Disable echo for the given handle. Returns the original bits
+    // of the console mode.
+    fn disable_echo(handle: HANDLE) -> Result<u32, PromptError> {
         let mut mode: u32 = 0;
         unsafe {
             if GetConsoleMode(handle, &mut mode) == FALSE {
                 return Err(PromptError::IOError(std::io::Error::last_os_error()));
             }
         }
+        let original_mode = mode;
 
-        if !echo {
-            mode &= !ENABLE_ECHO_INPUT;
-        } else {
-            mode |= ENABLE_ECHO_INPUT;
-        }
+        mode &= !ENABLE_ECHO_INPUT;
+        mode &= !ENABLE_LINE_INPUT;
+        mode |= ENABLE_PROCESSED_INPUT;
 
         unsafe {
             if SetConsoleMode(handle, mode) == FALSE {
                 let err = std::io::Error::last_os_error();
-                if echo {
-                    return Err(PromptError::EnableFailed(err));
-                } else {
-                    return Err(PromptError::IOError(err));
-                }
+                return Err(PromptError::IOError(err));
+            }
+        }
+
+        Ok(original_mode)
+    }
+
+    // Re-enable echo. orig must be the data return from the previous
+    // call to disable_echo
+    fn enable_echo(orig: u32, handle: HANDLE) -> Result<(), PromptError> {
+        unsafe {
+            if SetConsoleMode(handle, orig) == FALSE {
+                let err = std::io::Error::last_os_error();
+                return Err(PromptError::EnableFailed(err));
             }
         }
 
@@ -230,10 +241,15 @@ mod windows {
     /// Reads the password from STDIN. Does not include the newline.
     /// The stream must be Stdout or Stderr
     ///
+    /// An error will be returned if echo could not be disabled. The most
+    /// common cause of this will be that stdin was piped in. Callers should
+    /// generally call [`crate::isatty`] to check if stdin was redirected to
+    /// avoid this.
+    ///
     /// # Examples
     /// ```no_run
     /// // A typical use case would be to write the prompt to stderr and read
-    /// // the password from stdin while the output of the application is
+    /// // the password from stdin when the output of the application is
     /// // directed to stdout.
     /// use passterm::{isatty, Stream, prompt_password_stdin};
     /// if !isatty(Stream::Stdout) {
@@ -258,101 +274,51 @@ mod windows {
             handle
         };
 
-        let console = unsafe {
-            // FILE_TYPE_CHAR is 0x0002 which is a console
-            // NOTE: In the past on mysys2 terminals like git bash on windows
-            // the file type comes back as FILE_TYPE_PIPE 0x03. This means
-            // that we can't tell if we're in a pipe or a console, so echo
-            // won't be disabled at all.
-            GetFileType(handle) == crate::win32::FILE_TYPE_CHAR
-        };
-
-        // Disable terminal echo if we're in a console, if we're not,
-        // stdin was probably piped in.
-        if console {
-            set_echo(false, handle)?;
-        }
+        // Always try to disable terminal echo, if we can't stdin was
+        // probably piped in. Callers should check that stdin isatty.
+        let restore = disable_echo(handle)?;
 
         if let Some(p) = prompt {
             print_stream(p, stream)?;
         }
 
-        // The rust docs for std::io::Stdin note that windows does not
-        // support non UTF-8 byte sequences.
-        let mut pass = String::new();
-        let stdin = std::io::stdin();
-        match stdin.read_line(&mut pass) {
-            Ok(_) => {}
+        let password = match read_console(handle) {
+            Ok(p) => p,
             Err(e) => {
-                if prompt.is_some() {
-                    print_stream("\n", stream)?;
-                }
-
-                if console {
-                    set_echo(true, handle)?;
-                }
-                return Err(PromptError::IOError(e));
+                enable_echo(restore, handle)?;
+                print_stream("\n", stream)?;
+                return Err(e);
             }
         };
 
-        if prompt.is_some() {
-            print_stream("\n", stream)?;
-        }
+        enable_echo(restore, handle)?;
+        print_stream("\n", stream)?;
 
-        if console {
-            // Re-enable termianal echo.
-            set_echo(true, handle)?;
-        }
-
-        let pass = strip_newline(&pass).to_string();
-
-        Ok(pass)
+        Ok(password)
     }
 
     /// Write the optional prompt to the tty and read input from the tty
     /// Returns the String input (excluding newline)
     pub fn prompt_password_tty(prompt: Option<&str>) -> Result<String, PromptError> {
         let console_in = OpenOptions::new().read(true).write(true).open("CONIN$")?;
+        let console_out = OpenOptions::new().write(true).open("CONOUT$")?;
 
-        let console_out = if prompt.is_some() {
-            let console_out = OpenOptions::new().write(true).open("CONOUT$")?;
-
-            Some(console_out)
-        } else {
-            None
-        };
-
-        if let Some(out) = &console_out {
-            write_console(out.as_raw_handle(), prompt.unwrap())?;
+        if let Some(p) = prompt {
+            write_console(console_out.as_raw_handle(), p)?;
         }
 
-        set_echo(false, console_in.as_raw_handle())?;
+        let restore = disable_echo(console_in.as_raw_handle())?;
         let password = match read_console(console_in.as_raw_handle()) {
             Ok(p) => p,
             Err(e) => {
-                if let Some(out) = &console_out {
-                    // Write a \r\n to the console because echo was disabled.
-                    if let Err(e) = write_console(out.as_raw_handle(), "\r\n") {
-                        set_echo(true, console_in.as_raw_handle())?;
-                        return Err(e);
-                    }
-                }
-                set_echo(true, console_in.as_raw_handle())?;
+                enable_echo(restore, console_in.as_raw_handle())?;
+                write_console(console_out.as_raw_handle(), "\r\n")?;
                 return Err(e);
             }
         };
 
-        if let Some(out) = &console_out {
-            // Write a \r\n to the console because echo was disabled.
-            if let Err(e) = write_console(out.as_raw_handle(), "\r\n") {
-                set_echo(true, console_in.as_raw_handle())?;
-                return Err(e);
-            }
-        }
-
-        set_echo(true, console_in.as_raw_handle())?;
-
-        let password = strip_newline(&password).to_string();
+        enable_echo(restore, console_in.as_raw_handle())?;
+        write_console(console_out.as_raw_handle(), "\r\n")?;
 
         Ok(password)
     }
@@ -379,8 +345,44 @@ mod windows {
         Ok(())
     }
 
+    fn contains_crlf(input: &[u16]) -> bool {
+        let cr = 0x000d;
+        let lf = 0x000a;
+        for i in input {
+            if *i == cr || *i == lf {
+                return true;
+            }
+        }
+        false
+    }
+
+    // Returns the given input with \r, \n, \b removed
+    fn ignore_ctrl_chars(input: &[u16]) -> Vec<u16> {
+        let cr = 0x000d;
+        let lf = 0x000a;
+        let bs = 0x0008;
+        let mut res: Vec<u16> = Vec::with_capacity(input.len());
+        // For each backspace encountered, remove the previous entry.
+        for i in input {
+            let val = *i;
+            if val == cr || val == lf {
+                return res;
+            }
+            if val == bs {
+                res.pop();
+            } else {
+                res.push(val);
+            }
+        }
+
+        res
+    }
+
     /// Read from the console
     fn read_console(console_in: HANDLE) -> Result<String, PromptError> {
+        #[cfg(feature = "secure_zero")]
+        use zeroize::Zeroize;
+
         #[cfg(feature = "secure_zero")]
         let mut input = zeroize::Zeroizing::new(Vec::<u16>::new());
         #[cfg(feature = "secure_zero")]
@@ -389,7 +391,7 @@ mod windows {
         #[cfg(not(feature = "secure_zero"))]
         let mut input: Vec<u16> = Vec::new();
         #[cfg(not(feature = "secure_zero"))]
-        let mut buffer: [u16; 64] = [0; 64];
+        let mut buffer: [u16; 1] = [0; 1];
 
         loop {
             let mut num_read: u32 = 0;
@@ -410,15 +412,21 @@ mod windows {
             }
 
             let max_len = std::cmp::min(num_read, buffer.len() as u32) as usize;
-            if let Some(pos) = find_crlf(&buffer[..max_len]) {
-                input.extend_from_slice(&buffer[..pos]);
+
+            let chars = &buffer[..max_len];
+            input.extend_from_slice(chars);
+            if contains_crlf(chars) {
                 break;
-            } else {
-                input.extend_from_slice(&buffer[..max_len])
             }
         }
 
-        let password = match String::from_utf16(&input) {
+        #[cfg(feature = "secure_zero")]
+        let mut cleaned_input = ignore_ctrl_chars(input.as_slice());
+
+        #[cfg(not(feature = "secure_zero"))]
+        let cleaned_input = ignore_ctrl_chars(input.as_slice());
+
+        let password = match String::from_utf16(&cleaned_input) {
             Ok(s) => s,
             Err(_) => {
                 let err =
@@ -426,6 +434,9 @@ mod windows {
                 return Err(PromptError::IOError(err));
             }
         };
+
+        #[cfg(feature = "secure_zero")]
+        cleaned_input.zeroize();
 
         Ok(password)
     }
@@ -589,7 +600,7 @@ mod unix {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_crlf, find_lf, read_line, strip_newline};
+    use super::{find_lf, read_line, strip_newline};
 
     #[test]
     fn test_strip_newline() {
@@ -604,14 +615,6 @@ mod tests {
         let input2 = [0x41, 0x42, 0x43];
         assert_eq!(find_lf(&input), Some(3));
         assert_eq!(find_lf(&input2), None);
-    }
-
-    #[test]
-    fn test_find_crlf() {
-        let input = [0x006d, 0x0075, 0x0073, 0x0069, 0x0063, 0x000d, 0x000a];
-        let input2 = [0x006d, 0x0075, 0x0073, 0x0069, 0x0063];
-        assert_eq!(find_crlf(&input), Some(5));
-        assert_eq!(find_crlf(&input2), None);
     }
 
     #[test]

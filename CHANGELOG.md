@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 2.0.5
+
+2024-11-03
+
+- Fix extraneous newline being printed on windows
+
 ## Version 2.0.4
 
 2024-10-27

@@ -1,4 +1,8 @@
+// Copyright 2021-2024 Kyle Schreiber
+// SPDX-License-Identifier: BSD-3-Clause
+
 #![allow(non_snake_case, dead_code)]
+#![allow(clippy::upper_case_acronyms)]
 
 use std::ffi::c_void;
 use std::os::windows::raw::HANDLE;
@@ -9,6 +13,8 @@ pub const FALSE: BOOL = 0i32;
 pub const TRUE: BOOL = 1i32;
 pub const INVALID_HANDLE_VALUE: HANDLE = !0 as HANDLE;
 pub const ENABLE_ECHO_INPUT: u32 = 4;
+pub const ENABLE_LINE_INPUT: u32 = 2;
+pub const ENABLE_PROCESSED_INPUT: u32 = 1;
 pub const STD_ERROR_HANDLE: u32 = 0xfffffff4;
 pub const STD_INPUT_HANDLE: u32 = 0xfffffff6;
 pub const STD_OUTPUT_HANDLE: u32 = 0xfffffff5;
