@@ -2,7 +2,7 @@
 
 ## Version 2.0.5
 
-2024-11-03
+2024-12-07
 
 - Fix extraneous newline being printed on windows
 - Open tty with O_NOCTTY on unix systems to prevent the prompt from becoming
