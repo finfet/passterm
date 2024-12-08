@@ -5,6 +5,10 @@
 2024-11-03
 
 - Fix extraneous newline being printed on windows
+- Open tty with O_NOCTTY on unix systems to prevent the prompt from becoming
+  the controlling terminal
+- Fix stdin password prompt to always attempt to disable echo even if stdin
+  is not a tty
 
 ## Version 2.0.4
 

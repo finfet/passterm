@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Kyle Schreiber
+// Copyright 2021-2024 Kyle Schreiber
 // SPDX-License-Identifier: BSD-3-Clause
 
 //! # Terminal utilities
@@ -447,10 +447,11 @@ mod unix {
     use crate::{print_stream, read_line, strip_newline, PromptError, Stream};
 
     use libc::{tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
-    use std::fs::OpenOptions;
+    use std::ffi::CStr;
+    use std::fs::File;
     use std::io::Write;
     use std::mem::MaybeUninit;
-    use std::os::fd::AsRawFd;
+    use std::os::fd::{AsRawFd, FromRawFd};
 
     fn set_echo(echo: bool, fd: i32) -> Result<(), PromptError> {
         let mut tty = MaybeUninit::<termios>::uninit();
@@ -505,12 +506,8 @@ mod unix {
             return Err(PromptError::InvalidArgument);
         }
 
-        let is_tty = unsafe { libc::isatty(STDIN_FILENO) == 1 };
-
-        if is_tty {
-            // Disable terminal echo
-            set_echo(false, STDIN_FILENO)?;
-        }
+        // Disable terminal echo
+        set_echo(false, STDIN_FILENO)?;
 
         if let Some(p) = prompt {
             print_stream(p, stream)?;
@@ -525,9 +522,7 @@ mod unix {
                     print_stream("\n", stream)?;
                 }
 
-                if is_tty {
-                    set_echo(true, STDIN_FILENO)?;
-                }
+                set_echo(true, STDIN_FILENO)?;
                 return Err(PromptError::IOError(e));
             }
         };
@@ -536,10 +531,8 @@ mod unix {
             print_stream("\n", stream)?;
         }
 
-        if is_tty {
-            // Re-enable terminal echo
-            set_echo(true, STDIN_FILENO)?;
-        }
+        // Re-enable terminal echo
+        set_echo(true, STDIN_FILENO)?;
 
         let pass = strip_newline(&pass).to_string();
 
@@ -549,10 +542,26 @@ mod unix {
     /// Write the optional prompt to the tty and read input from the tty
     /// Returns the String input (excluding newline)
     pub fn prompt_password_tty(prompt: Option<&str>) -> Result<String, PromptError> {
-        let mut tty = OpenOptions::new()
-            .read(true)
-            .write(prompt.is_some())
-            .open("/dev/tty")?;
+        let flags = if prompt.is_some() {
+            libc::O_RDWR | libc::O_NOCTTY
+        } else {
+            libc::O_RDONLY | libc::O_NOCTTY
+        };
+
+        let raw_tty = unsafe {
+            libc::open(
+                CStr::from_bytes_with_nul_unchecked(b"/dev/tty\0").as_ptr(),
+                flags,
+            )
+        };
+
+        if raw_tty == -1 {
+            let err = std::io::Error::last_os_error();
+            return Err(PromptError::IOError(err));
+        }
+
+        let mut tty = unsafe { File::from_raw_fd(raw_tty) };
+
         if let Some(p) = prompt {
             write_tty(p, &mut tty)?;
         }
