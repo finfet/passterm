@@ -1,7 +1,7 @@
 // Copyright 2021-2024 Kyle Schreiber
 // SPDX-License-Identifier: BSD-3-Clause
 
-use passterm::{isatty, Stream};
+use passterm::{Stream, isatty};
 
 fn main() {
     let stdin_tty = isatty(Stream::Stdin);

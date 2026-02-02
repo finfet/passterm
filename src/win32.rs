@@ -20,18 +20,18 @@ pub const STD_INPUT_HANDLE: u32 = 0xfffffff6;
 pub const STD_OUTPUT_HANDLE: u32 = 0xfffffff5;
 pub const FILE_TYPE_CHAR: u32 = 2u32;
 
-windows_link::link!("kernel32.dll", "system", fn GetFileType(hfile: HANDLE) -> u32);
-windows_link::link!("kernel32.dll", "system", fn GetConsoleMode(hconsolehandle: HANDLE, lpmode: *mut u32) -> BOOL);
-windows_link::link!("kernel32.dll", "system", fn GetStdHandle(nstdhandle: u32) -> HANDLE);
-windows_link::link!("kernel32.dll", "system", fn ReadConsoleW(
+windows_link::link!("kernel32.dll" "system" fn GetFileType(hfile: HANDLE) -> u32);
+windows_link::link!("kernel32.dll" "system" fn GetConsoleMode(hconsolehandle: HANDLE, lpmode: *mut u32) -> BOOL);
+windows_link::link!("kernel32.dll" "system" fn GetStdHandle(nstdhandle: u32) -> HANDLE);
+windows_link::link!("kernel32.dll" "system" fn ReadConsoleW(
     hconsoleinput: HANDLE,
     lpbuffer: *mut c_void,
     nnumberofcharstoread: u32,
     lpnumberofcharsread: *mut u32,
     pinputcontrol: *const c_void,
 ) -> BOOL);
-windows_link::link!("kernel32.dll", "system", fn SetConsoleMode(hconsolehandle: HANDLE, dwmode: u32) -> BOOL);
-windows_link::link!("kernel32.dll", "system", fn WriteConsoleW(
+windows_link::link!("kernel32.dll" "system" fn SetConsoleMode(hconsolehandle: HANDLE, dwmode: u32) -> BOOL);
+windows_link::link!("kernel32.dll" "system" fn WriteConsoleW(
     hconsoleoutput: HANDLE,
     lpbuffer: *const c_void,
     nnumberofcharstowrite: u32,

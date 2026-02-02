@@ -188,12 +188,12 @@ fn find_lf(input: &[u8]) -> Option<usize> {
 
 #[cfg(target_family = "windows")]
 mod windows {
-    use crate::win32::{
-        GetConsoleMode, GetStdHandle, ReadConsoleW, SetConsoleMode, WriteConsoleW,
-        ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT,
-    };
     use crate::win32::{BOOL, ENABLE_ECHO_INPUT, FALSE, INVALID_HANDLE_VALUE, STD_INPUT_HANDLE};
-    use crate::{print_stream, PromptError, Stream};
+    use crate::win32::{
+        ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT, GetConsoleMode, GetStdHandle, ReadConsoleW,
+        SetConsoleMode, WriteConsoleW,
+    };
+    use crate::{PromptError, Stream, print_stream};
 
     use std::fs::OpenOptions;
     use std::os::windows::io::AsRawHandle;
@@ -444,9 +444,9 @@ mod windows {
 
 #[cfg(target_family = "unix")]
 mod unix {
-    use crate::{print_stream, read_line, strip_newline, PromptError, Stream};
+    use crate::{PromptError, Stream, print_stream, read_line, strip_newline};
 
-    use libc::{tcgetattr, tcsetattr, termios, ECHO, STDIN_FILENO, TCSANOW};
+    use libc::{ECHO, STDIN_FILENO, TCSANOW, tcgetattr, tcsetattr, termios};
     use std::ffi::CStr;
     use std::fs::File;
     use std::io::Write;

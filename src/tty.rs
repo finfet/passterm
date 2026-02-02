@@ -28,21 +28,19 @@ mod windows {
     /// Returns true if the given stream is a tty.
     #[allow(clippy::let_and_return)]
     pub fn isatty(stream: Stream) -> bool {
-        let handle = unsafe {
-            match stream {
-                Stream::Stdin => match get_handle(STD_INPUT_HANDLE) {
-                    Ok(h) => h,
-                    Err(_) => return false,
-                },
-                Stream::Stdout => match get_handle(STD_OUTPUT_HANDLE) {
-                    Ok(h) => h,
-                    Err(_) => return false,
-                },
-                Stream::Stderr => match get_handle(STD_ERROR_HANDLE) {
-                    Ok(h) => h,
-                    Err(_) => return false,
-                },
-            }
+        let handle = match stream {
+            Stream::Stdin => match get_handle(STD_INPUT_HANDLE) {
+                Ok(h) => h,
+                Err(_) => return false,
+            },
+            Stream::Stdout => match get_handle(STD_OUTPUT_HANDLE) {
+                Ok(h) => h,
+                Err(_) => return false,
+            },
+            Stream::Stderr => match get_handle(STD_ERROR_HANDLE) {
+                Ok(h) => h,
+                Err(_) => return false,
+            },
         };
 
         let is_atty = unsafe {
@@ -53,8 +51,9 @@ mod windows {
         is_atty
     }
 
-    unsafe fn get_handle(input_handle: u32) -> Result<HANDLE, ()> {
-        let handle = GetStdHandle(input_handle);
+    fn get_handle(input_handle: u32) -> Result<HANDLE, ()> {
+        let handle = unsafe { GetStdHandle(input_handle) };
+
         if handle == INVALID_HANDLE_VALUE {
             return Err(());
         }

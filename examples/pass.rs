@@ -1,7 +1,7 @@
 // Copyright 2021-2024 Kyle Schreiber
 // SPDX-License-Identifier: BSD-3-Clause
 
-use passterm::{prompt_password_stdin, prompt_password_tty, Stream};
+use passterm::{Stream, prompt_password_stdin, prompt_password_tty};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     prompt_stdin()?;
