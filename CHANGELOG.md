@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 2.0.6
+
+2025-02-01
+
+- Switch to windows-link for windows linking
+
 ## Version 2.0.5
 
 2024-12-07

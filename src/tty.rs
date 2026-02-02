@@ -1,4 +1,4 @@
-// Copyright 2021-2024 Kyle Schreiber
+// Copyright 2021-2026 Kyle Schreiber
 // SPDX-License-Identifier: BSD-3-Clause
 
 /// Stream represents the Stdin, Stdout, and Stderr streams.

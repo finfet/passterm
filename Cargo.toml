@@ -1,7 +1,7 @@
 [package]
 name = "passterm"
-version = "2.0.5"
-edition = "2021"
+version = "2.0.6"
+edition = "2024"
 authors = [
 	"Kyle Schreiber <kyle@80x24.net>",
 ]
@@ -19,6 +19,9 @@ zeroize = { version = "1.8", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-link = "0.2.1"
 
 [features]
 default = []
