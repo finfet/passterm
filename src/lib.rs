@@ -21,19 +21,19 @@ use std::error::Error;
 use std::io::Read;
 
 #[cfg(target_family = "windows")]
-pub use crate::windows::prompt_password_stdin;
+pub use crate::windows::{prompt_password_stdin, prompt_password_stdin_limit};
 
 #[cfg(target_family = "windows")]
-pub use crate::windows::prompt_password_tty;
+pub use crate::windows::{prompt_password_tty, prompt_password_tty_limit};
 
 #[cfg(target_family = "windows")]
 pub use crate::tty::isatty;
 
 #[cfg(target_family = "unix")]
-pub use crate::unix::prompt_password_stdin;
+pub use crate::unix::{prompt_password_stdin, prompt_password_stdin_limit};
 
 #[cfg(target_family = "unix")]
-pub use crate::unix::prompt_password_tty;
+pub use crate::unix::{prompt_password_tty, prompt_password_tty_limit};
 
 #[cfg(target_family = "unix")]
 pub use crate::tty::isatty;
@@ -123,24 +123,30 @@ fn find_crlf(input: &[u16]) -> Option<usize> {
     None
 }
 
-/// Read data from the buffer until a LF (0x0a) character is found.
-/// Returns the data as a string (including newline). Note that the input
-/// data must contain an LF or this function will loop indefinitely.
-///
-/// Returns an error if the data is invalid UTF-8.
+/// Read data from the buffer until a LF (0x0a) character is found
+/// Returns the data as a string (including newline).
+/// Limit will read up to N bytes from the source. Zero is unlimited
+/// Returns an ErrorKind::InvalidData if the data is invalid UTF-8.
+/// Returns an ErrorKind::UnexpectedEof if EOF if reached before LF is found
+/// Returns an ErrorKind::Other if the read limit has been exceeded
 #[allow(dead_code)]
-fn read_line<T: Read>(mut source: T) -> Result<String, std::io::Error> {
+fn read_line<T: Read>(mut source: T, limit: usize) -> Result<String, std::io::Error> {
     #[cfg(feature = "secure_zero")]
     let mut data_read = zeroize::Zeroizing::new(Vec::<u8>::new());
     #[cfg(feature = "secure_zero")]
-    let mut buffer = zeroize::Zeroizing::new([0u8; 64]);
+    let mut buffer = zeroize::Zeroizing::new([0u8; 1]);
 
     #[cfg(not(feature = "secure_zero"))]
     let mut data_read = Vec::<u8>::new();
     #[cfg(not(feature = "secure_zero"))]
-    let mut buffer: [u8; 64] = [0; 64];
+    let mut buffer: [u8; 1] = [0; 1];
+
+    let mut total_read = 0;
 
     loop {
+        if limit > 0 && total_read > limit {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Exceeded read limit"));
+        }
         let n = match source.read(buffer.as_mut()) {
             Ok(n) => n,
             Err(e) => match e.kind() {
@@ -150,6 +156,12 @@ fn read_line<T: Read>(mut source: T) -> Result<String, std::io::Error> {
                 }
             },
         };
+
+        if n == 0 {
+            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "End of file reached before newline found"));
+        }
+
+        total_read += n;
 
         if let Some(pos) = find_lf(&buffer[..n]) {
             data_read.extend_from_slice(&buffer[..pos + 1]);
@@ -260,6 +272,16 @@ mod windows {
         prompt: Option<&str>,
         stream: Stream,
     ) -> Result<String, PromptError> {
+        return prompt_password_stdin_limit(prompt, stream, 0);
+    }
+
+    /// Equivalent to [`crate::prompt_password_stdin`] but specifying a limit
+    /// will read up to N bytes from stdin. Zero is unlimited
+    pub fn prompt_password_stdin_limit(
+        prompt: Option<&str>,
+        stream: Stream,
+        limit: usize,
+    ) -> Result<String, PromptError> {
         if stream == Stream::Stdin {
             return Err(PromptError::InvalidArgument);
         }
@@ -282,7 +304,7 @@ mod windows {
             print_stream(p, stream)?;
         }
 
-        let password = match read_console(handle) {
+        let password = match read_console(handle, limit) {
             Ok(p) => p,
             Err(e) => {
                 enable_echo(restore, handle)?;
@@ -300,6 +322,12 @@ mod windows {
     /// Write the optional prompt to the tty and read input from the tty
     /// Returns the String input (excluding newline)
     pub fn prompt_password_tty(prompt: Option<&str>) -> Result<String, PromptError> {
+        return prompt_password_tty_limit(prompt, 0);
+    }
+
+    /// Equivalent to [`crate::prompt_password_tty`] but specifying a limit
+    /// will read up to N bytes from the tty. Zero is unlimited
+    pub fn prompt_password_tty_limit(prompt: Option<&str>, limit: usize) -> Result<String, PromptError> {
         let console_in = OpenOptions::new().read(true).write(true).open("CONIN$")?;
         let console_out = OpenOptions::new().write(true).open("CONOUT$")?;
 
@@ -308,7 +336,7 @@ mod windows {
         }
 
         let restore = disable_echo(console_in.as_raw_handle())?;
-        let password = match read_console(console_in.as_raw_handle()) {
+        let password = match read_console(console_in.as_raw_handle(), limit) {
             Ok(p) => p,
             Err(e) => {
                 enable_echo(restore, console_in.as_raw_handle())?;
@@ -379,21 +407,27 @@ mod windows {
     }
 
     /// Read from the console
-    fn read_console(console_in: HANDLE) -> Result<String, PromptError> {
+    fn read_console(console_in: HANDLE, limit: usize) -> Result<String, PromptError> {
         #[cfg(feature = "secure_zero")]
         use zeroize::Zeroize;
 
         #[cfg(feature = "secure_zero")]
         let mut input = zeroize::Zeroizing::new(Vec::<u16>::new());
         #[cfg(feature = "secure_zero")]
-        let mut buffer = zeroize::Zeroizing::new([0u16; 64]);
+        let mut buffer = zeroize::Zeroizing::new([0u16; 1]);
 
         #[cfg(not(feature = "secure_zero"))]
         let mut input: Vec<u16> = Vec::new();
         #[cfg(not(feature = "secure_zero"))]
         let mut buffer: [u16; 1] = [0; 1];
 
+        let mut total_read = 0;
+
         loop {
+            if limit > 0 && total_read > limit {
+                let err = std::io::Error::new(std::io::ErrorKind::Other, "Exceeded read limit");
+                return Err(PromptError::IOError(err));
+            }
             let mut num_read: u32 = 0;
             let num_read_ptr: *mut u32 = &mut num_read;
             let res: BOOL = unsafe {
@@ -413,6 +447,8 @@ mod windows {
 
             let max_len = std::cmp::min(num_read, buffer.len() as u32) as usize;
 
+            total_read += max_len;
+
             let chars = &buffer[..max_len];
             input.extend_from_slice(chars);
             if contains_crlf(chars) {
@@ -421,7 +457,7 @@ mod windows {
         }
 
         #[cfg(feature = "secure_zero")]
-        let mut cleaned_input = ignore_ctrl_chars(input.as_slice());
+        let cleaned_input = zeroize::Zeroizing::new(ignore_ctrl_chars(input.as_slice()));
 
         #[cfg(not(feature = "secure_zero"))]
         let cleaned_input = ignore_ctrl_chars(input.as_slice());
@@ -434,9 +470,6 @@ mod windows {
                 return Err(PromptError::IOError(err));
             }
         };
-
-        #[cfg(feature = "secure_zero")]
-        cleaned_input.zeroize();
 
         Ok(password)
     }
@@ -453,7 +486,7 @@ mod unix {
     use std::mem::MaybeUninit;
     use std::os::fd::{AsRawFd, FromRawFd};
 
-    fn set_echo(echo: bool, fd: i32) -> Result<(), PromptError> {
+    fn set_echo(echo: bool, fd: i32) -> Result<bool, PromptError> {
         let mut tty = MaybeUninit::<termios>::uninit();
         unsafe {
             if tcgetattr(fd, tty.as_mut_ptr()) != 0 {
@@ -462,6 +495,8 @@ mod unix {
         }
 
         let mut tty = unsafe { tty.assume_init() };
+
+        let orig_echo = (tty.c_lflag & ECHO) != 0;
 
         if !echo {
             tty.c_lflag &= !ECHO;
@@ -481,7 +516,7 @@ mod unix {
             }
         }
 
-        Ok(())
+        Ok(orig_echo)
     }
 
     /// Write the optional prompt to the specified stream.
@@ -502,39 +537,51 @@ mod unix {
         prompt: Option<&str>,
         stream: Stream,
     ) -> Result<String, PromptError> {
+        return prompt_password_stdin_limit(prompt, stream, 0);
+    }
+
+    /// Equivalent to [`crate::prompt_password_stdin`] but specifying a limit
+    /// will read up to N bytes from stdin. Zero is unlimited
+    pub fn prompt_password_stdin_limit(
+        prompt: Option<&str>,
+        stream: Stream,
+        limit: usize,
+    ) -> Result<String, PromptError> {
         if stream == Stream::Stdin {
             return Err(PromptError::InvalidArgument);
         }
 
         // Disable terminal echo
-        set_echo(false, STDIN_FILENO)?;
+        let orig = set_echo(false, STDIN_FILENO)?;
 
         if let Some(p) = prompt {
             print_stream(p, stream)?;
         }
 
-        let mut pass = String::new();
-        let stdin = std::io::stdin();
-        match stdin.read_line(&mut pass) {
-            Ok(_) => {}
+        let mut stdin = std::io::stdin();
+
+        let password = match read_line(&mut stdin, limit) {
+            Ok(p) => p,
             Err(e) => {
                 if prompt.is_some() {
                     print_stream("\n", stream)?;
                 }
-
-                set_echo(true, STDIN_FILENO)?;
+                set_echo(orig, STDIN_FILENO)?;
                 return Err(PromptError::IOError(e));
             }
         };
+
+        #[cfg(feature = "secure_zero")]
+        let password = zeroize::Zeroizing::new(password);
 
         if prompt.is_some() {
             print_stream("\n", stream)?;
         }
 
         // Re-enable terminal echo
-        set_echo(true, STDIN_FILENO)?;
+        set_echo(orig, STDIN_FILENO)?;
 
-        let pass = strip_newline(&pass).to_string();
+        let pass = strip_newline(&password).to_string();
 
         Ok(pass)
     }
@@ -542,6 +589,12 @@ mod unix {
     /// Write the optional prompt to the tty and read input from the tty
     /// Returns the String input (excluding newline)
     pub fn prompt_password_tty(prompt: Option<&str>) -> Result<String, PromptError> {
+        return prompt_password_tty_limit(prompt, 0);
+    }
+
+    /// Equivalent to [`crate::prompt_password_tty`] but specifying a limit
+    /// will read up to N bytes from the tty. Zero is unlimited
+    pub fn prompt_password_tty_limit(prompt: Option<&str>, limit: usize) -> Result<String, PromptError> {
         let flags = if prompt.is_some() {
             libc::O_RDWR | libc::O_NOCTTY
         } else {
@@ -567,17 +620,17 @@ mod unix {
         }
 
         let tty_fd = tty.as_raw_fd();
-        set_echo(false, tty_fd)?;
-        let password = match read_line(&mut tty) {
+        let orig = set_echo(false, tty_fd)?;
+        let password = match read_line(&mut tty, limit) {
             Ok(p) => p,
             Err(e) => {
                 if prompt.is_some() {
                     if let Err(e) = write_tty("\n", &mut tty) {
-                        set_echo(true, tty_fd)?;
+                        set_echo(orig, tty_fd)?;
                         return Err(e.into());
                     }
                 }
-                set_echo(true, tty_fd)?;
+                set_echo(orig, tty_fd)?;
                 return Err(e.into());
             }
         };
@@ -587,12 +640,12 @@ mod unix {
 
         if prompt.is_some() {
             if let Err(e) = write_tty("\n", &mut tty) {
-                set_echo(true, tty_fd)?;
+                set_echo(orig, tty_fd)?;
                 return Err(e.into());
             }
         }
 
-        set_echo(true, tty_fd)?;
+        set_echo(orig, tty_fd)?;
 
         let password = strip_newline(&password).to_string();
 
@@ -610,6 +663,7 @@ mod unix {
 #[cfg(test)]
 mod tests {
     use super::{find_lf, read_line, strip_newline};
+    use std::io::Cursor;
 
     #[test]
     fn test_strip_newline() {
@@ -627,27 +681,40 @@ mod tests {
     }
 
     #[test]
-    fn test_read_line() -> Result<(), String> {
+    fn test_read_line() -> Result<(), std::io::Error> {
         let line = "Hello\n".to_string();
-        let pass = match read_line(line.as_bytes()) {
-            Ok(p) => p,
-            Err(e) => return Err(e.to_string()),
-        };
+        let pass = read_line(line.as_bytes(), 0)?;
         assert_eq!(pass, line);
 
         Ok(())
     }
 
     #[test]
-    #[cfg_attr(not(feature = "secure_zero"), ignore)]
-    fn test_read_line_secure_zero() -> Result<(), String> {
-        let line = "Hello\n".to_string();
-        let pass = match read_line(line.as_bytes()) {
-            Ok(p) => p,
-            Err(e) => return Err(e.to_string()),
-        };
-        assert_eq!(pass, line);
+    fn test_read_line_single_newline() -> Result<(), std::io::Error> {
+        let line1 = "Hello\n";
+        let line2 = "World\n";
+        let mut source = Cursor::new(format!("{}{}", line1, line2));
+        let first = read_line(&mut source, 0)?;
+        let second = read_line(&mut source, 0)?;
+        assert_eq!(first, line1);
+        assert_eq!(second, line2);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_read_line_eof() {
+        let mut input = Cursor::new("turtles");
+        let res = read_line(&mut input, 0);
+        let err = res.err().unwrap().to_string();
+        assert_eq!("End of file reached before newline found", &err);
+    }
+
+    #[test]
+    fn test_read_line_limit() {
+        let mut input = Cursor::new("turtles\n");
+        let res = read_line(&mut input, 2);
+        let err = res.err().unwrap().to_string();
+        assert_eq!("Exceeded read limit", &err);
     }
 }
