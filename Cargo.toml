@@ -1,6 +1,6 @@
 [package]
 name = "passterm"
-version = "2.0.6"
+version = "2.1.0"
 edition = "2024"
 authors = [
 	"Kyle Schreiber <kyle@80x24.net>",
@@ -15,13 +15,13 @@ keywords = ["tty", "password", "security", "isatty", "getpass"]
 categories = ["command-line-interface"]
 
 [dependencies]
-zeroize = { version = "1.8", optional = true }
+zeroize = { version = "1.9", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-link = "0.2.1"
+windows-link = "0.100"
 
 [features]
 default = []

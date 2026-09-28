@@ -1,8 +1,17 @@
 # Changelog
 
+## Version 2.1.0
+
+2026-09-28
+
+- Feature: Add `prompt_password_stdin_limit` and `prompt_password_tty_limit`
+- Fix: missing zeroize handling for some code paths
+- Fix: On Linux, restore original terminal echo state even if originally disabled
+- Fix: for consuming data beyond the first input newline
+
 ## Version 2.0.6
 
-2025-02-01
+2026-02-01
 
 - Switch to windows-link for windows linking
 
